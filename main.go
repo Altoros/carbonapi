@@ -915,6 +915,14 @@ type graphiteConfig struct {
 	Prefix   string
 }
 
+type authConfig struct {
+	Enable      bool   `yaml:"enable"`
+	Username    string `yaml:"username"`
+	Password    string `yaml:"password"`
+	Salt        string `yaml:"salt"`
+	DatabaseURL string `yaml:"databaseURL"`
+}
+
 var Config = struct {
 	Logger          []zapwriter.Config `yaml:"logger"`
 	ZipperUrl       string             `yaml:"zipper"`
@@ -928,6 +936,7 @@ var Config = struct {
 	PidFile         string             `yaml:"pidFile"`
 	SendGlobsAsIs   bool               `yaml:"sendGlobsAsIs"`
 	MaxBatchSize    int                `yaml:"maxBatchSize"`
+	Auth            authConfig         `yaml:"auth"`
 
 	queryCache cache.BytesCache
 	findCache  cache.BytesCache
@@ -939,6 +948,8 @@ var Config = struct {
 
 	// Limiter limits concurrent zipper requests
 	limiter limiter
+
+	db *DB
 }{
 	ZipperUrl:     "http://localhost:8080",
 	Listen:        "[::]:8081",
@@ -1173,14 +1184,35 @@ func main() {
 	}
 
 	r := http.DefaultServeMux
-	r.HandleFunc("/render/", renderHandler)
-	r.HandleFunc("/render", renderHandler)
 
-	r.HandleFunc("/metrics/find/", findHandler)
-	r.HandleFunc("/metrics/find", findHandler)
+	rh := renderHandler
+	fh := findHandler
+	ph := passthroughHandler
 
-	r.HandleFunc("/info/", passthroughHandler)
-	r.HandleFunc("/info", passthroughHandler)
+	if Config.Auth.Enable {
+		Config.db, err = Open(Config.Auth.DatabaseURL, Config.Auth.Salt)
+		if err != nil {
+			logger.Fatal("error during Open()",
+				zap.Error(err),
+			)
+		}
+
+		r.HandleFunc("/users/", authAdmin(usersHandler))
+		r.HandleFunc("/users", authAdmin(usersHandler))
+
+		rh = authUser(rh)
+		fh = authUser(fh)
+		ph = authUser(ph)
+	}
+
+	r.HandleFunc("/render/", rh)
+	r.HandleFunc("/render", rh)
+
+	r.HandleFunc("/metrics/find/", fh)
+	r.HandleFunc("/metrics/find", fh)
+
+	r.HandleFunc("/info/", ph)
+	r.HandleFunc("/info", ph)
 
 	r.HandleFunc("/lb_check", lbcheckHandler)
 	r.HandleFunc("/", usageHandler)
@@ -1198,5 +1230,162 @@ func main() {
 		logger.Fatal("gracehttp failed",
 			zap.Error(err),
 		)
+	}
+}
+
+func usersHandler(w http.ResponseWriter, r *http.Request) {
+	// copied from above
+	t0 := time.Now()
+	uuid := uuid.NewV4()
+	// TODO: Migrate to context.WithTimeout
+	// ctx, _ := context.WithTimeout(context.TODO(), Config.ZipperTimeout)
+	ctx := util.SetUUID(r.Context(), uuid.String())
+	username, _, _ := r.BasicAuth()
+	//logger := zapwriter.Logger("render").With(
+	//	zap.String("carbonapi_uuid", uuid.String()),
+	//	zap.String("username", username),
+	//)
+
+	srcIP, srcPort := splitRemoteAddr(r.RemoteAddr)
+	accessLogger := zapwriter.Logger("access").With(
+		zap.String("handler", "render"),
+		zap.String("carbonapi_uuid", uuid.String()),
+		zap.String("username", username),
+		zap.String("url", r.URL.RequestURI()),
+		zap.String("peer_ip", srcIP),
+		zap.String("peer_port", srcPort),
+		zap.String("host", r.Host),
+		zap.String("referer", r.Referer()),
+		zap.String("method", r.Method),
+	)
+
+	id := strings.TrimPrefix(r.URL.Path, "/users")
+	id = strings.TrimPrefix(id, "/")
+
+	if id == "" {
+		switch r.Method {
+		case http.MethodGet: // GET /users
+			u, err := Config.db.List(ctx)
+			if err != nil {
+				handleError(w, r, accessLogger, t0, err)
+				return
+			}
+
+			b, err := json.Marshal(u)
+			if err != nil {
+				handleError(w, r, accessLogger, t0, err)
+				return
+			}
+			writeResponse(w, b, "json", "")
+		case http.MethodPost: // POST /users
+			var u User
+			if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+				handleError(w, r, accessLogger, t0, err)
+				return
+			}
+
+			// TODO: c.Validate
+			if len(u.Username) < 4 || len(u.Password) < 4 || len(u.Globs) == 0 {
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+				accessLogger.Info("bad request",
+					zap.Int("http_code", http.StatusBadRequest),
+				)
+			}
+
+			if err := Config.db.Save(ctx, &u); err != nil {
+				handleError(w, r, accessLogger, t0, err)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			accessLogger.Info("request failed",
+				zap.Int("http_code", http.StatusMethodNotAllowed),
+			)
+		}
+	} else {
+		switch r.Method {
+		case http.MethodGet: // GET /user/:id
+			u, err := Config.db.FindByUsername(ctx, id)
+			if err != nil {
+				http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+				accessLogger.Info("not found",
+					zap.Int("http_code", http.StatusMethodNotAllowed),
+					zap.String("id", id),
+				)
+			}
+
+			b, err := json.Marshal(u)
+			if err != nil {
+				handleError(w, r, accessLogger, t0, err)
+				return
+			}
+			writeResponse(w, b, "json", "")
+		case http.MethodDelete: // DELETE /user/:id
+			if err := Config.db.Delete(ctx, id); err != nil {
+				handleError(w, r, accessLogger, t0, err)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			accessLogger.Info("request failed",
+				zap.Int("http_code", http.StatusMethodNotAllowed),
+			)
+		}
+	}
+
+	accessLogger.Info("request served",
+		zap.String("uri", r.RequestURI),
+		zap.Int("http_code", http.StatusOK),
+		zap.Duration("runtime", time.Since(t0)),
+	)
+}
+
+func handleError(w http.ResponseWriter, r *http.Request, accessLogger *zap.Logger, t0 time.Time, err error) {
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	accessLogger.Info("request failed",
+		zap.String("uri", r.RequestURI),
+		zap.Int("http_code", http.StatusInternalServerError),
+		zap.String("reason", err.Error()),
+		zap.Duration("runtime", time.Since(t0)),
+	)
+}
+
+const userKey = 123
+
+// userFromRequest returns user entity from the context
+// when the auth feature is enabled or returns nil
+func userFromContext(ctx context.Context) *User {
+	if Config.Auth.Enable {
+		return ctx.Value(userKey).(*User)
+	}
+	return nil
+}
+
+func authUser(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		username, password, _ := r.BasicAuth()
+		u, err := Config.db.FindByUsernameAndPassword(r.Context(), username, password)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+
+		// save user to the request context
+		c := context.WithValue(r.Context(), userKey, u)
+		r = r.WithContext(c)
+		h(w, r)
+	}
+}
+
+func authAdmin(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, p, _ := r.BasicAuth()
+		if u != Config.Auth.Username || p != Config.Auth.Password {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		h(w, r)
 	}
 }

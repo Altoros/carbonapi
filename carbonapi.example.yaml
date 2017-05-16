@@ -66,3 +66,16 @@ logger:
       file: "carbonapi.log"
       level: "info"
       encoding: "json"
+
+auth:
+    enable: false
+
+    # admin credentials for users management
+    username: admin
+    password: secret
+
+    # hashing salt
+    salt: seasalt
+
+    # mysql://, postgres:// or sqlite3://
+    databaseURL: postgres://postgres:postgres@localhost/carbonapi?sslmode=disable
