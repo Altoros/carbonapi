@@ -1285,15 +1285,16 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// TODO: c.Validate
-			if len(u.Username) < 4 || len(u.Password) < 4 || len(u.Globs) == 0 {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-				accessLogger.Info("bad request",
-					zap.Int("http_code", http.StatusBadRequest),
-				)
-			}
-
 			if err := Config.db.Save(ctx, &u); err != nil {
+				if verr, ok := err.(validationError); ok {
+					http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+					accessLogger.Info("bad request",
+						zap.Int("http_code", http.StatusBadRequest),
+						zap.String("reason", verr.Error()),
+					)
+					return
+				}
+
 				handleError(w, r, accessLogger, t0, err)
 				return
 			}
@@ -1353,7 +1354,11 @@ func handleError(w http.ResponseWriter, r *http.Request, accessLogger *zap.Logge
 	)
 }
 
-const userKey = 123
+type contextKey int
+
+const (
+	userKey contextKey = iota
+)
 
 // userFromRequest returns user entity from the context
 // when the auth feature is enabled or returns nil

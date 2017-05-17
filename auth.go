@@ -38,6 +38,7 @@ func (u *User) Can(s string) bool {
 					return true
 				}
 
+				// everything except . matches *
 				if s[i] != '.' {
 					continue
 				}
@@ -59,8 +60,11 @@ func (u *User) Can(s string) bool {
 			// last s and g position
 			if len(s)-1 == i && len(g)-1 == j {
 				return true
-			} else if len(g)-1 == j {
-				break // end of g reached
+			}
+
+			// end of g reached
+			if len(g)-1 == j {
+				break
 			}
 
 			j++
@@ -155,12 +159,40 @@ func (db *DB) Clean() error {
 	return err
 }
 
+type validationError string
+
+func (e validationError) Error() string {
+	return string(e)
+}
+
+var (
+	errInvalidUsername = validationError("username is too short, len < 4")
+	errInvalidPassword = validationError("password is too short, len < 4")
+	errInvalidGlobs    = validationError("globs cannot be empty, len = 0")
+	errInvalidGlob     = validationError("glob cannot be an empty string")
+)
+
 // UserSave creates or updates existing user
-func (db *DB) Save(ctx context.Context, u *User) error {
+func (db *DB) Save(ctx context.Context, u *User) (err error) {
+	if len(u.Username) < 4 {
+		return errInvalidUsername
+	} else if len(u.Password) < 4 {
+		return errInvalidPassword
+	} else if len(u.Globs) == 0 {
+		return errInvalidGlobs
+	}
+
+	for _, g := range u.Globs {
+		if g == "" {
+			return errInvalidGlob
+		}
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
+
 	defer func() {
 		if err != nil {
 			tx.Rollback()
