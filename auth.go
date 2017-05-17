@@ -25,18 +25,45 @@ type User struct {
 // Can returns true when s matches at least one of user's globs
 func (u *User) Can(s string) bool {
 	for _, g := range u.Globs {
-		for i := 0; i < len(s) && i < len(g); i++ {
-			if g[i] == '*' {
-				return true
+		for i, j := 0, 0; i < len(s); i++ {
+			// enter wildcard
+			if g[j] == '*' {
+				// next symbol is * as well
+				if len(g)-1 > j && g[j+1] == '*' {
+					return true
+				}
+
+				// end of s reached
+				if len(s)-1 == i {
+					return true
+				}
+
+				if s[i] != '.' {
+					continue
+				}
+
+				// end of g is reached
+				if len(g)-1 == j {
+					break
+				}
+
+				// end of *
+				j++
 			}
 
-			if g[i] != s[i] {
+			// compare bytes
+			if s[i] != g[j] {
 				break
 			}
 
-			if i == len(s)-1 && i == len(g)-1 {
+			// last s and g position
+			if len(s)-1 == i && len(g)-1 == j {
 				return true
+			} else if len(g)-1 == j {
+				break // end of g reached
 			}
+
+			j++
 		}
 	}
 	return false

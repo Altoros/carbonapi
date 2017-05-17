@@ -9,20 +9,26 @@ import (
 func TestUser_Can(t *testing.T) {
 	t.Parallel()
 
-	u := User{Globs: []string{"foo.*", "baz.*", "bam"}}
+	u := User{Globs: []string{"a.*", "b", "c.*.c", "z.*.*.z", "y.**"}}
 	for q, want := range map[string]bool{
-		"*":       false,
-		"bar.*":   false,
-		"foo.*":   true,
-		"foo.bar": true,
-		"foo":     false,
-		"baz.a":   true,
-		"bam":     true,
-		"bam1":    false,
-		"ba":      false,
+		"a.b":       true,
+		"a.bc":      true,
+		"a.b.c":     false,
+		"a":         false,
+		"b":         true,
+		"bc":        false,
+		"ab":        false,
+		"c.c.c":     true,
+		"c.c.z":     false,
+		"c.c.cc":    false,
+		"z.ab.bc.z": true,
+		"z.a.b.zz":  false,
+		"y.a":       true,
+		"y.a.a.b":   true,
 	} {
-		if u.Can(q) != want {
-			t.Errorf("Can(%q) = %t, want %t", q, u.Can(q), want)
+		got := u.Can(q)
+		if got != want {
+			t.Errorf("Can(%q) = %t, want %t", q, got, want)
 		}
 	}
 }

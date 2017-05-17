@@ -122,7 +122,7 @@ func (z zipper) Render(ctx context.Context, metric string, from, until int32) ([
 		return result, err
 	}
 
-	if m := pbresp.Metrics; len(m) == 0 {
+	if len(pbresp.Metrics) == 0 {
 		return result, errNoMetrics
 	}
 
