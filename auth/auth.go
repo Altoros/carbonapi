@@ -1,4 +1,4 @@
-package main
+package auth
 
 import (
 	"context"
@@ -159,17 +159,17 @@ func (db *DB) Clean() error {
 	return err
 }
 
-type validationError string
+type ValidationError string
 
-func (e validationError) Error() string {
+func (e ValidationError) Error() string {
 	return string(e)
 }
 
 var (
-	errInvalidUsername = validationError("username is too short, len < 4")
-	errInvalidPassword = validationError("password is too short, len < 4")
-	errInvalidGlobs    = validationError("globs cannot be empty, len = 0")
-	errInvalidGlob     = validationError("glob cannot be an empty string")
+	errInvalidUsername = ValidationError("username is too short, len < 4")
+	errInvalidPassword = ValidationError("password is too short, len < 4")
+	errInvalidGlobs    = ValidationError("globs cannot be empty, len = 0")
+	errInvalidGlob     = ValidationError("glob cannot be an empty string")
 )
 
 // UserSave creates or updates existing user

@@ -21,6 +21,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/go-graphite/carbonapi/auth"
 	"github.com/go-graphite/carbonapi/expr"
 	"github.com/go-graphite/carbonapi/util"
 	"github.com/go-graphite/carbonzipper/cache"
@@ -950,7 +951,7 @@ var Config = struct {
 	// Limiter limits concurrent zipper requests
 	limiter limiter
 
-	db *DB
+	db *auth.DB
 }{
 	ZipperUrl:     "http://localhost:8080",
 	Listen:        "[::]:8081",
@@ -1191,12 +1192,13 @@ func main() {
 	ph := passthroughHandler
 
 	if Config.Auth.Enable {
-		Config.db, err = Open(Config.Auth.DatabaseURL, Config.Auth.Salt)
+		Config.db, err = auth.Open(Config.Auth.DatabaseURL, Config.Auth.Salt)
 		if err != nil {
 			logger.Fatal("error during Open()",
 				zap.Error(err),
 			)
 		}
+		defer Config.db.Close()
 
 		r.HandleFunc("/users/", authAdmin(usersHandler))
 		r.HandleFunc("/users", authAdmin(usersHandler))
@@ -1279,14 +1281,14 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			writeResponse(w, b, "json", "")
 		case http.MethodPost: // POST /users
-			var u User
+			var u auth.User
 			if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 				handleError(w, r, accessLogger, t0, err)
 				return
 			}
 
 			if err := Config.db.Save(ctx, &u); err != nil {
-				if verr, ok := err.(validationError); ok {
+				if verr, ok := err.(auth.ValidationError); ok {
 					http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 					accessLogger.Info("bad request",
 						zap.Int("http_code", http.StatusBadRequest),
@@ -1362,9 +1364,9 @@ const (
 
 // userFromRequest returns user entity from the context
 // when the auth feature is enabled or returns nil
-func userFromContext(ctx context.Context) *User {
+func userFromContext(ctx context.Context) *auth.User {
 	if Config.Auth.Enable {
-		return ctx.Value(userKey).(*User)
+		return ctx.Value(userKey).(*auth.User)
 	}
 	return nil
 }
