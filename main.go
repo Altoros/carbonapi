@@ -1363,7 +1363,7 @@ const (
 )
 
 // userFromRequest returns user entity from the context
-// when the auth feature is enabled or returns nil
+// when the auth feature is enabled or returns nil.
 func userFromContext(ctx context.Context) *auth.User {
 	if Config.Auth.Enable {
 		return ctx.Value(userKey).(*auth.User)
@@ -1371,6 +1371,7 @@ func userFromContext(ctx context.Context) *auth.User {
 	return nil
 }
 
+// authUser authorizes users saved to sql database.
 func authUser(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username, password, _ := r.BasicAuth()
@@ -1387,6 +1388,7 @@ func authUser(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// authAdmin authorized admin user using credentials from config.
 func authAdmin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, p, _ := r.BasicAuth()

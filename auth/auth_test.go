@@ -33,7 +33,7 @@ func TestUser_Can(t *testing.T) {
 	}
 }
 
-func TestDB(t *testing.T) {
+func TestDB_All(t *testing.T) {
 	for name, key := range map[string]string{
 		"sqlite": "TEST_SQLITE_DATABASE_URL",
 		"mysql":  "TEST_MYSQL_DATABASE_URL",
@@ -66,10 +66,17 @@ func TestDB(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if u.Username != u2.Username &&
-					u.Password != u2.Password &&
-					len(u.Globs) != len(u2.Globs) {
-				t.Error("users are not equal")
+			if !usersAreEqual(u, u2) {
+				t.Error("FindByUsernameAndPassword: users are not equal")
+			}
+
+			u2, err = db.FindByUsername(context.Background(), "user")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !usersAreEqual(u, u2) {
+				t.Fatal("FindByUsername: users are not equal")
 			}
 
 			if err = db.Delete(context.Background(), "user"); err != nil {
@@ -78,8 +85,20 @@ func TestDB(t *testing.T) {
 
 			_, err = db.FindByUsernameAndPassword(context.Background(), "user", "secret")
 			if err != ErrNotFound {
-				t.Errorf("err = %v, want %v", err, ErrNotFound)
+				t.Errorf("FindByUsernameAndPassword: err = %v, want %v", err, ErrNotFound)
 			}
 		})
 	}
+}
+
+func usersAreEqual(u1, u2 *User) bool {
+	if u1.Username != u2.Username || len(u1.Globs) != len(u2.Globs) {
+		return false
+	}
+	for i := 0; i < len(u1.Globs); i++ {
+		if u1.Globs[i] != u2.Globs[i] {
+			return false
+		}
+	}
+	return true
 }
