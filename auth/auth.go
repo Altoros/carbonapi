@@ -80,6 +80,12 @@ type DB struct {
 	scheme string
 }
 
+const (
+	schemeMySQL    = "mysql"
+	schemePostgres = "postgres"
+	schemeSQLite   = "sqlite3"
+)
+
 func Open(url, salt string) (*DB, error) {
 	chunks := strings.Split(url, "://")
 	if len(chunks) != 2 {
@@ -87,15 +93,15 @@ func Open(url, salt string) (*DB, error) {
 	}
 
 	switch chunks[0] {
-	case "mysql":
-	case "postgres":
-	case "sqlite3":
+	case schemeMySQL:
+	case schemePostgres:
+	case schemeSQLite:
 	default:
 		return nil, fmt.Errorf("%q scheme is not supported", chunks[0])
 	}
 
 	switch chunks[0] {
-	case "postgres":
+	case schemePostgres:
 		chunks[1] = url
 	}
 
@@ -125,23 +131,16 @@ func Open(url, salt string) (*DB, error) {
 	return &DB{DB: db, salt: salt, scheme: chunks[0]}, nil
 }
 
-// placeholderRegexp looks for postgres $ placeholders
 var placeholderRegexp = regexp.MustCompile("\\$\\d+")
 
 // exec executes a query without returning rows
-func (db *DB) exec(ctx context.Context, tx *sql.Tx, q string, v ...interface{}) (sql.Result, error) {
-	if tx == nil {
-		return db.ExecContext(ctx, db.prep(q), v...)
-	}
-	return tx.ExecContext(ctx, db.prep(q), v...)
+func (db *DB) exec(ctx context.Context, q string, v ...interface{}) (sql.Result, error) {
+	return db.ExecContext(ctx, db.prep(q), v...)
 }
 
 // query executes a query that returns rows
-func (db *DB) query(ctx context.Context, tx *sql.Tx, q string, v ...interface{}) (*sql.Rows, error) {
-	if tx == nil {
-		return db.QueryContext(ctx, db.prep(q), v...)
-	}
-	return tx.QueryContext(ctx, db.prep(q), v...)
+func (db *DB) query(ctx context.Context, q string, v ...interface{}) (*sql.Rows, error) {
+	return db.QueryContext(ctx, db.prep(q), v...)
 }
 
 // prep is needed for mysql compatibility
@@ -163,8 +162,10 @@ func (db *DB) Clean() error {
 	return db.Close()
 }
 
+// ValidationError returned when model validation fails.
 type ValidationError string
 
+// Error is string representation.
 func (e ValidationError) Error() string {
 	return string(e)
 }
@@ -177,7 +178,7 @@ var (
 )
 
 // UserSave creates or updates existing user
-func (db *DB) Save(ctx context.Context, u *User) (err error) {
+func (db *DB) Save(ctx context.Context, u *User) (error) {
 	if len(u.Username) < 4 {
 		return errInvalidUsername
 	} else if len(u.Password) < 4 {
@@ -192,18 +193,12 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 		}
 	}
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
+	q := "SELECT 1 FROM users WHERE username = $1"
+	if db.scheme != schemeSQLite {
+		q += " FOR UPDATE"
 	}
 
-	defer func() {
-		if err != nil {
-			err = tx.Rollback()
-		}
-	}()
-
-	rows, err := db.query(ctx, tx, `SELECT 1 FROM users WHERE username = $1`, u.Username)
+	rows, err := db.query(ctx, q, u.Username)
 	if err != nil {
 		return err
 	}
@@ -219,19 +214,13 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 
 	if rows.Next() {
 		// update existing
-		_, err = db.exec(ctx, tx, `UPDATE users SET password = $1, globs = $2 WHERE username = $3`,
+		_, err = db.exec(ctx, "UPDATE users SET password = $1, globs = $2 WHERE username = $3",
 			u.Password, globs, u.Username)
 	} else {
 		// create a new record
-		_, err = db.exec(ctx, tx, `INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)`,
+		_, err = db.exec(ctx, "INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)",
 			u.Username, u.Password, globs)
 	}
-
-	if err != nil {
-		return err
-	}
-
-	err = tx.Commit()
 	return err
 }
 
@@ -240,10 +229,7 @@ var ErrNotFound = errors.New("user not found")
 
 // List is list of users
 func (db DB) List(ctx context.Context) ([]*User, error) {
-	rows, err := db.query(ctx, nil, `
-		SELECT username, password, globs
-		FROM users`)
-
+	rows, err := db.query(ctx, "SELECT username, password, globs FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +248,7 @@ func (db DB) List(ctx context.Context) ([]*User, error) {
 
 // FindByUsername finds user by user name or returns ErrNotFound
 func (db DB) FindByUsername(ctx context.Context, username string) (*User, error) {
-	rows, err := db.query(ctx, nil, `
+	rows, err := db.query(ctx, `
 		SELECT username, password, globs
 		FROM users
 		WHERE username = $1
@@ -282,7 +268,7 @@ func (db DB) FindByUsername(ctx context.Context, username string) (*User, error)
 
 // FindByUsernameAndPassword
 func (db *DB) FindByUsernameAndPassword(ctx context.Context, username, password string) (*User, error) {
-	rows, err := db.query(ctx, nil, `
+	rows, err := db.query(ctx, `
 		SELECT username, password, globs
 		FROM users
 		WHERE username = $1
@@ -320,7 +306,7 @@ func scanUser(rows *sql.Rows) (*User, error) {
 
 // UserDelete deletes the named user
 func (db *DB) Delete(ctx context.Context, username string) error {
-	_, err := db.exec(ctx, nil, `DELETE FROM users WHERE username = $1`, username)
+	_, err := db.exec(ctx, "DELETE FROM users WHERE username = $1", username)
 	return err
 }
 
