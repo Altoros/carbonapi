@@ -104,6 +104,11 @@ func Open(url, salt string) (*DB, error) {
 		return nil, err
 	}
 
+	if err = db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	// create tables
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
 		username VARCHAR(32) NOT NULL PRIMARY KEY,
@@ -152,11 +157,10 @@ func (db *DB) prep(q string) string {
 
 // Clean closes db connection and drops all tables
 func (db *DB) Clean() error {
-	if err := db.Close(); err != nil {
+	if _, err := db.Exec("DROP TABLE users"); err != nil {
 		return err
 	}
-	_, err := db.Exec("DROP TABLE users")
-	return err
+	return db.Close()
 }
 
 type ValidationError string
@@ -188,16 +192,15 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 		}
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			err = tx.Rollback()
 		}
-		err = tx.Commit()
 	}()
 
 	rows, err := db.query(ctx, tx, `SELECT 1 FROM users WHERE username = $1`, u.Username)
@@ -214,16 +217,21 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 		return err
 	}
 
-	// update existing user if it exists
 	if rows.Next() {
+		// update existing
 		_, err = db.exec(ctx, tx, `UPDATE users SET password = $1, globs = $2 WHERE username = $3`,
 			u.Password, globs, u.Username)
+	} else {
+		// create a new record
+		_, err = db.exec(ctx, tx, `INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)`,
+			u.Username, u.Password, globs)
+	}
+
+	if err != nil {
 		return err
 	}
 
-	// create a new record
-	_, err = db.exec(ctx, tx, `INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)`,
-		u.Username, u.Password, globs)
+	err = tx.Commit()
 	return err
 }
 
