@@ -1289,7 +1289,7 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 
 			if err := Config.db.Save(ctx, &u); err != nil {
 				if verr, ok := err.(auth.ValidationError); ok {
-					http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+					http.Error(w, http.StatusText(http.StatusBadRequest)+": "+verr.Error(), http.StatusBadRequest)
 					accessLogger.Info("bad request",
 						zap.Int("http_code", http.StatusBadRequest),
 						zap.String("reason", verr.Error()),
@@ -1347,7 +1347,7 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleError(w http.ResponseWriter, r *http.Request, accessLogger *zap.Logger, t0 time.Time, err error) {
-	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	http.Error(w, http.StatusText(http.StatusInternalServerError)+": "+err.Error(), http.StatusInternalServerError)
 	accessLogger.Info("request failed",
 		zap.String("uri", r.RequestURI),
 		zap.Int("http_code", http.StatusInternalServerError),
@@ -1391,8 +1391,8 @@ func authUser(h http.HandlerFunc) http.HandlerFunc {
 // authAdmin authorized admin user using credentials from config.
 func authAdmin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		u, p, _ := r.BasicAuth()
-		if u != Config.Auth.Username || p != Config.Auth.Password {
+		username, password, _ := r.BasicAuth()
+		if username != Config.Auth.Username || password != Config.Auth.Password {
 			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return
 		}
