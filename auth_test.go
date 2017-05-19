@@ -27,37 +27,51 @@ func TestUsersManagement(t *testing.T) {
 	defer db.Clean()
 
 	h := http.NewServeMux()
-	h.HandleFunc("/users", authAdmin(usersHandler(db), "admin", "secret"))
+	h.HandleFunc("/users/", authAdmin(usersHandler(db), "admin", "secret"))
 	h.HandleFunc("/", authUser(func(w http.ResponseWriter, r *http.Request) {
 		u := userFromContext(r.Context())
 		if u == nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 	}, db))
 
 	// create user
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{
+	testRequest(t, h, "admin", "secret",
+		httptest.NewRequest(http.MethodPost, "/users/", strings.NewReader(`{
+		"username": "user",
+		"password": "1234",
+		"globs": ["*"]
+	}`)))
+
+	// update user and set right password that we'll use
+	testRequest(t, h, "admin", "secret",
+		httptest.NewRequest(http.MethodPost, "/users/", strings.NewReader(`{
 		"username": "user",
 		"password": "secret",
 		"globs": ["*"]
-	}`))
-	r.SetBasicAuth("admin", "secret")
+	}`)))
+
+	// test the show user action
+	testRequest(t, h, "admin", "secret",
+		httptest.NewRequest(http.MethodGet, "/users/user", nil))
+
+	// test user access
+	testRequest(t, h, "user", "secret",
+		httptest.NewRequest(http.MethodGet, "/", nil))
+
+	// test delete user
+	testRequest(t, h, "admin", "secret",
+		httptest.NewRequest(http.MethodDelete, "/users/user", nil))
+}
+
+func testRequest(t *testing.T, h http.Handler, username, password string, r *http.Request) {
+	w := httptest.NewRecorder()
+	r.SetBasicAuth(username, password)
 	h.ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("POST /users %d, want %d", w.Code, http.StatusOK)
-	}
-
-	// test access
-	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/test-access", nil)
-	r.SetBasicAuth("user", "secret")
-	h.ServeHTTP(w, r)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("GET / %d, want %d", w.Code, http.StatusOK)
+		t.Fatalf("%s %s status = %d body = %q, want %d", r.Method, r.URL.Path, w.Code, w.Body.String(), http.StatusOK)
 	}
 }

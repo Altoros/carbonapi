@@ -133,21 +133,27 @@ func Open(url, salt string) (*DB, error) {
 
 var placeholderRegexp = regexp.MustCompile("\\$\\d+")
 
+// DB or Tx
+type conn interface {
+	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
+}
+
 // exec executes a query without returning rows
-func (db *DB) exec(ctx context.Context, q string, v ...interface{}) (sql.Result, error) {
-	return db.ExecContext(ctx, db.prep(q), v...)
+func (db *DB) exec(c conn, ctx context.Context, q string, v ...interface{}) (sql.Result, error) {
+	return c.ExecContext(ctx, db.prep(q), v...)
 }
 
 // query executes a query that returns rows
-func (db *DB) query(ctx context.Context, q string, v ...interface{}) (*sql.Rows, error) {
-	return db.QueryContext(ctx, db.prep(q), v...)
+func (db *DB) query(c conn, ctx context.Context, q string, v ...interface{}) (*sql.Rows, error) {
+	return c.QueryContext(ctx, db.prep(q), v...)
 }
 
 // prep is needed for mysql compatibility
 // it replaces postgres $ placeholders with ?
 func (db *DB) prep(q string) string {
 	switch db.scheme {
-	case "mysql", "sqlite3":
+	case schemeMySQL, schemeSQLite:
 		return placeholderRegexp.ReplaceAllString(q, "?")
 	default:
 		return q
@@ -178,7 +184,7 @@ var (
 )
 
 // UserSave creates or updates existing user
-func (db *DB) Save(ctx context.Context, u *User) (error) {
+func (db *DB) Save(ctx context.Context, u *User) (err error) {
 	if len(u.Username) < 4 {
 		return errInvalidUsername
 	} else if len(u.Password) < 4 {
@@ -193,12 +199,25 @@ func (db *DB) Save(ctx context.Context, u *User) (error) {
 		}
 	}
 
+	// we need to use transactions here to make sure that
+	// query and exec are using the same underlying connection.
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			err = tx.Rollback()
+		}
+	}()
+
 	q := "SELECT 1 FROM users WHERE username = $1"
 	if db.scheme != schemeSQLite {
 		q += " FOR UPDATE"
 	}
 
-	rows, err := db.query(ctx, q, u.Username)
+	rows, err := db.query(tx, ctx, q, u.Username)
 	if err != nil {
 		return err
 	}
@@ -214,14 +233,18 @@ func (db *DB) Save(ctx context.Context, u *User) (error) {
 
 	if rows.Next() {
 		// update existing
-		_, err = db.exec(ctx, "UPDATE users SET password = $1, globs = $2 WHERE username = $3",
+		_, err = db.exec(tx, ctx, "UPDATE users SET password = $1, globs = $2 WHERE username = $3",
 			u.Password, globs, u.Username)
 	} else {
 		// create a new record
-		_, err = db.exec(ctx, "INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)",
+		_, err = db.exec(tx, ctx, "INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)",
 			u.Username, u.Password, globs)
 	}
-	return err
+
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // ErrNotFound returned when user cannot be found
@@ -229,7 +252,7 @@ var ErrNotFound = errors.New("user not found")
 
 // List is list of users
 func (db DB) List(ctx context.Context) ([]*User, error) {
-	rows, err := db.query(ctx, "SELECT username, password, globs FROM users")
+	rows, err := db.query(db, ctx, "SELECT username, password, globs FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +271,7 @@ func (db DB) List(ctx context.Context) ([]*User, error) {
 
 // FindByUsername finds user by user name or returns ErrNotFound
 func (db DB) FindByUsername(ctx context.Context, username string) (*User, error) {
-	rows, err := db.query(ctx, `
+	rows, err := db.query(db, ctx, `
 		SELECT username, password, globs
 		FROM users
 		WHERE username = $1
@@ -268,7 +291,7 @@ func (db DB) FindByUsername(ctx context.Context, username string) (*User, error)
 
 // FindByUsernameAndPassword
 func (db *DB) FindByUsernameAndPassword(ctx context.Context, username, password string) (*User, error) {
-	rows, err := db.query(ctx, `
+	rows, err := db.query(db, ctx, `
 		SELECT username, password, globs
 		FROM users
 		WHERE username = $1
@@ -306,7 +329,7 @@ func scanUser(rows *sql.Rows) (*User, error) {
 
 // UserDelete deletes the named user
 func (db *DB) Delete(ctx context.Context, username string) error {
-	_, err := db.exec(ctx, "DELETE FROM users WHERE username = $1", username)
+	_, err := db.exec(db, ctx, "DELETE FROM users WHERE username = $1", username)
 	return err
 }
 

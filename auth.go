@@ -88,7 +88,7 @@ func usersHandler(db *auth.DB) http.HandlerFunc {
 			}
 		} else {
 			switch r.Method {
-			case http.MethodGet: // GET /user/:id
+			case http.MethodGet: // GET /users/:id
 				u, err := db.FindByUsername(ctx, id)
 				if err != nil {
 					http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -104,7 +104,7 @@ func usersHandler(db *auth.DB) http.HandlerFunc {
 					return
 				}
 				writeResponse(w, b, "json", "")
-			case http.MethodDelete: // DELETE /user/:id
+			case http.MethodDelete: // DELETE /users/:id
 				if err := db.Delete(ctx, id); err != nil {
 					handleError(w, accessLogger, t0, err)
 					return
