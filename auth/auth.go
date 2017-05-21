@@ -177,25 +177,25 @@ func (e ValidationError) Error() string {
 }
 
 var (
-	errInvalidUsername = ValidationError("username is too short, len < 4")
-	errInvalidPassword = ValidationError("password is too short, len < 4")
-	errInvalidGlobs    = ValidationError("globs cannot be empty, len = 0")
-	errInvalidGlob     = ValidationError("glob cannot be an empty string")
+	ErrInvalidUsername = ValidationError("username is too short, len < 4")
+	ErrInvalidPassword = ValidationError("password is too short, len < 4")
+	ErrInvalidGlobs    = ValidationError("globs cannot be empty, len = 0")
+	ErrInvalidGlob     = ValidationError("glob cannot be an empty string")
 )
 
 // UserSave creates or updates existing user
 func (db *DB) Save(ctx context.Context, u *User) (err error) {
 	if len(u.Username) < 4 {
-		return errInvalidUsername
+		return ErrInvalidUsername
 	} else if len(u.Password) < 4 {
-		return errInvalidPassword
+		return ErrInvalidPassword
 	} else if len(u.Globs) == 0 {
-		return errInvalidGlobs
+		return ErrInvalidGlobs
 	}
 
 	for _, g := range u.Globs {
 		if g == "" {
-			return errInvalidGlob
+			return ErrInvalidGlob
 		}
 	}
 
