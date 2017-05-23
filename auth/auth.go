@@ -10,9 +10,9 @@ import (
 	"regexp"
 	"strings"
 
+	_ "github.com/cznic/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // User is user entity representation
@@ -83,7 +83,8 @@ type DB struct {
 const (
 	schemeMySQL    = "mysql"
 	schemePostgres = "postgres"
-	schemeSQLite   = "sqlite3"
+	schemeSQLite   = "sqlite"
+	schemeSQLite3  = "sqlite3"
 )
 
 func Open(url, salt string) (*DB, error) {
@@ -96,6 +97,7 @@ func Open(url, salt string) (*DB, error) {
 	case schemeMySQL:
 	case schemePostgres:
 	case schemeSQLite:
+	case schemeSQLite3:
 	default:
 		return nil, fmt.Errorf("%q scheme is not supported", chunks[0])
 	}
@@ -103,6 +105,8 @@ func Open(url, salt string) (*DB, error) {
 	switch chunks[0] {
 	case schemePostgres:
 		chunks[1] = url
+	case schemeSQLite3:
+		chunks[0] = schemeSQLite
 	}
 
 	db, err := sql.Open(chunks[0], chunks[1])
