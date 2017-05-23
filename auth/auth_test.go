@@ -8,7 +8,16 @@ import (
 
 func TestUser_Can(t *testing.T) {
 	t.Parallel()
+	testUser(t)
+}
 
+func BenchmarkUser_Can(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		testUser(b)
+	}
+}
+
+func testUser(t interface{Errorf(string, ...interface{})}) {
 	u := User{Globs: []string{"a.*", "b", "c.*.c", "z.*.*.z", "y.**"}}
 	for q, want := range map[string]bool{
 		"a.b":       true,

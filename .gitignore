@@ -1,3 +1,4 @@
 carbonapi
 vendor
 *.sqlite3
+carbonapi.yaml

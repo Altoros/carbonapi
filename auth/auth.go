@@ -22,19 +22,23 @@ type User struct {
 	Globs    []string `json:"globs"`
 }
 
-// Can returns true when s matches at least one of user's globs
+// Can returns true when s matches at least one of user's globs.
+//
+// Glob syntax:
+// *  matches everything except .
+// ** matches everything
 func (u *User) Can(s string) bool {
 	for _, g := range u.Globs {
 		for i, j := 0, 0; i < len(s); i++ {
 			// enter wildcard
 			if g[j] == '*' {
 				// next symbol is * as well
-				if len(g)-1 > j && g[j+1] == '*' {
+				if len(g) > j+1 && g[j+1] == '*' {
 					return true
 				}
 
-				// end of s reached
-				if len(s)-1 == i {
+				// end of is reached
+				if len(s) == i+1 {
 					return true
 				}
 
@@ -44,7 +48,7 @@ func (u *User) Can(s string) bool {
 				}
 
 				// end of g is reached
-				if len(g)-1 == j {
+				if len(g) == j+1 {
 					break
 				}
 
@@ -57,13 +61,13 @@ func (u *User) Can(s string) bool {
 				break
 			}
 
-			// last s and g position
-			if len(s)-1 == i && len(g)-1 == j {
+			// last s and g positions
+			if len(s) == i+1 && len(g) == j+1 {
 				return true
 			}
 
-			// end of g reached
-			if len(g)-1 == j {
+			// end of g is reached
+			if len(g) == j+1 {
 				break
 			}
 
