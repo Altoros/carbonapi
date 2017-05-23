@@ -29,7 +29,7 @@ type User struct {
 // ** matches everything
 func (u *User) Can(s string) bool {
 	for _, g := range u.Globs {
-		for i, j := 0, 0; i < len(s); i++ {
+		for i, j := 0, 0;; i++ {
 			// enter wildcard
 			if g[j] == '*' {
 				// next symbol is * as well
@@ -69,6 +69,21 @@ func (u *User) Can(s string) bool {
 			// end of g is reached
 			if len(g) == j+1 {
 				break
+			}
+
+			// end of s is reached
+			if len(s) == i+1 {
+				// rest of g are *
+				r := g[j+1:]
+				if len(r) > 0 {
+					for _, c := range r {
+						if c != '*' {
+							return false
+						}
+					}
+					return true
+				}
+				return false
 			}
 
 			j++
