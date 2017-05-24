@@ -37,7 +37,7 @@ func (u *User) Can(s string) bool {
 					return true
 				}
 
-				// end of is reached
+				// end of s is reached
 				if len(s) == i+1 {
 					return true
 				}
@@ -73,7 +73,9 @@ func (u *User) Can(s string) bool {
 
 			// end of s is reached
 			if len(s) == i+1 {
-				return true
+				// next g symbol is `.` or `*`, so:
+				// glob `abc.*` matches `abc` only, not `a` or `ab`
+				return g[j+1] == '.' || g[j+1] == '*'
 			}
 
 			j++

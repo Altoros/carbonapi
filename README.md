@@ -98,15 +98,16 @@ Globing
 
 Here are few examples:
 
-| Glob       | Metric    | Matches |
-|------------|-----------|---------|
-| `a.*`      | `a`       | Yes     |
-|            | `a.b`     | Yes     |
-|            | `a.b.c`   | No      |
-| `b.**`     | `b`       | Yes     |
-|            | `b.c`     | Yes     |
-|            | `b.c.z`   | Yes     |
-|            | `z`       | No      |
+| Glob   | Metric   | Matches |
+|--------|----------|---------|
+| `aa.*` | `a`      | No      |
+|        | `aa`     | Yes     |
+|        | `aa.b`   | Yes     |
+|        | `aa.b.c` | No      |
+| `b.**` | `b`      | Yes     |
+|        | `b.c`    | Yes     |
+|        | `b.c.z`  | Yes     |
+|        | `z`      | No      |
 
 
 License

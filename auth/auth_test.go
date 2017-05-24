@@ -26,6 +26,7 @@ func testUser(t interface {
 		"a.bc":      true,
 		"a.b.c":     false,
 		"a":         true,
+		"b":         false,
 		"bb":        true,
 		"bbm":       false,
 		"bc":        false,
