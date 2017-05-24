@@ -73,17 +73,7 @@ func (u *User) Can(s string) bool {
 
 			// end of s is reached
 			if len(s) == i+1 {
-				// rest of g are *
-				r := g[j+1:]
-				if len(r) > 0 {
-					for _, c := range r {
-						if c != '*' {
-							return false
-						}
-					}
-					return true
-				}
-				return false
+				return true
 			}
 
 			j++
