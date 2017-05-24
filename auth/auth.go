@@ -174,6 +174,11 @@ func (db *DB) prep(q string) string {
 	}
 }
 
+// Close closes db connection.
+func (db *DB) Close() error {
+	return db.db.Close()
+}
+
 // Clean closes db connection and drops all tables.
 func (db *DB) Clean() error {
 	if _, err := db.db.Exec("DROP TABLE users"); err != nil {
