@@ -15,7 +15,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// User is user entity representation
+// User is user entity representation.
 type User struct {
 	Username string   `json:"username"`
 	Password string   `json:"password,omitempty"`
@@ -23,13 +23,10 @@ type User struct {
 }
 
 // Can returns true when s matches at least one of user's globs.
-//
-// Glob syntax:
-// *  matches everything except .
-// ** matches everything
+// See README.md for documentation and examples.
 func (u *User) Can(s string) bool {
 	for _, g := range u.Globs {
-		for i, j := 0, 0;; i++ {
+		for i, j := 0, 0; ; i++ {
 			// enter wildcard
 			if g[j] == '*' {
 				// next symbol is * as well
@@ -84,9 +81,9 @@ func (u *User) Can(s string) bool {
 	return false
 }
 
+// DB is users management unit.
 type DB struct {
-	*sql.DB
-
+	db     *sql.DB
 	salt   string
 	scheme string
 }
@@ -98,6 +95,8 @@ const (
 	schemeSQLite3  = "sqlite3"
 )
 
+// Open opens the named database url and uses the provided
+// salt for passwords hashing.
 func Open(url, salt string) (*DB, error) {
 	chunks := strings.Split(url, "://")
 	if len(chunks) != 2 {
@@ -143,29 +142,29 @@ func Open(url, salt string) (*DB, error) {
 		return nil, err
 	}
 
-	return &DB{DB: db, salt: salt, scheme: chunks[0]}, nil
+	return &DB{db: db, salt: salt, scheme: chunks[0]}, nil
 }
 
 var placeholderRegexp = regexp.MustCompile("\\$\\d+")
 
-// DB or Tx
+// conn is a database interface, `*sql.DB` or `*sql.Tx`
 type conn interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
 }
 
-// exec executes a query without returning rows
+// exec executes a query without returning rows.
 func (db *DB) exec(c conn, ctx context.Context, q string, v ...interface{}) (sql.Result, error) {
 	return c.ExecContext(ctx, db.prep(q), v...)
 }
 
-// query executes a query that returns rows
+// query executes a query that returns rows.
 func (db *DB) query(c conn, ctx context.Context, q string, v ...interface{}) (*sql.Rows, error) {
 	return c.QueryContext(ctx, db.prep(q), v...)
 }
 
-// prep is needed for mysql compatibility
-// it replaces postgres $ placeholders with ?
+// prep replaces postgres placeholders `$n` with `?`,
+// needed for multi sql driver support.
 func (db *DB) prep(q string) string {
 	switch db.scheme {
 	case schemeMySQL, schemeSQLite:
@@ -175,12 +174,12 @@ func (db *DB) prep(q string) string {
 	}
 }
 
-// Clean closes db connection and drops all tables
+// Clean closes db connection and drops all tables.
 func (db *DB) Clean() error {
-	if _, err := db.Exec("DROP TABLE users"); err != nil {
+	if _, err := db.db.Exec("DROP TABLE users"); err != nil {
 		return err
 	}
-	return db.Close()
+	return db.db.Close()
 }
 
 // ValidationError returned when model validation fails.
@@ -198,7 +197,7 @@ var (
 	ErrInvalidGlob     = ValidationError("glob cannot be an empty string")
 )
 
-// UserSave creates or updates existing user
+// UserSave creates or updates existing user.
 func (db *DB) Save(ctx context.Context, u *User) (err error) {
 	if len(u.Username) < 4 {
 		return ErrInvalidUsername
@@ -216,7 +215,7 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 
 	// we need to use transactions here to make sure that
 	// query and exec are using the same underlying connection.
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -262,12 +261,12 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 	return tx.Commit()
 }
 
-// ErrNotFound returned when user cannot be found
+// ErrNotFound returned when user cannot be found.
 var ErrNotFound = errors.New("user not found")
 
-// List is list of users
+// List is list of users.
 func (db DB) List(ctx context.Context) ([]*User, error) {
-	rows, err := db.query(db, ctx, "SELECT username, password, globs FROM users")
+	rows, err := db.query(db.db, ctx, "SELECT username, password, globs FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -284,9 +283,10 @@ func (db DB) List(ctx context.Context) ([]*User, error) {
 	return uu, nil
 }
 
-// FindByUsername finds user by user name or returns ErrNotFound
+// FindByUsername finds user by user name,
+// `ErrNotFound` returned when it fails.
 func (db DB) FindByUsername(ctx context.Context, username string) (*User, error) {
-	rows, err := db.query(db, ctx, `
+	rows, err := db.query(db.db, ctx, `
 		SELECT username, password, globs
 		FROM users
 		WHERE username = $1
@@ -304,9 +304,10 @@ func (db DB) FindByUsername(ctx context.Context, username string) (*User, error)
 	return scanUser(rows)
 }
 
-// FindByUsernameAndPassword
+// FindByUsernameAndPassword finds user by username and password,
+// `ErrNotFound` returned when it fails.
 func (db *DB) FindByUsernameAndPassword(ctx context.Context, username, password string) (*User, error) {
-	rows, err := db.query(db, ctx, `
+	rows, err := db.query(db.db, ctx, `
 		SELECT username, password, globs
 		FROM users
 		WHERE username = $1
@@ -342,13 +343,13 @@ func scanUser(rows *sql.Rows) (*User, error) {
 	return &u, nil
 }
 
-// UserDelete deletes the named user
+// Delete deletes the named user.
 func (db *DB) Delete(ctx context.Context, username string) error {
-	_, err := db.exec(db, ctx, "DELETE FROM users WHERE username = $1", username)
+	_, err := db.exec(db.db, ctx, "DELETE FROM users WHERE username = $1", username)
 	return err
 }
 
-// hash returns base64 encoded hash of the provided string plus salt
+// hash returns base64 encoded hash of the provided string plus salt.
 func hash(s, salt string) string {
 	h := sha256.New()
 	h.Write([]byte(s))
@@ -358,12 +359,12 @@ func hash(s, salt string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))[:32]
 }
 
-// marshalStringSlice dumps a slice of strings into byte encoding
+// marshalStringSlice dumps a slice of strings into byte encoding.
 func marshalStringSlice(ss []string) ([]byte, error) {
 	return json.Marshal(&ss)
 }
 
-// unmarshalStringSlice converts byte encoding into a slice of strings
+// unmarshalStringSlice converts byte encoding into a slice of strings.
 func unmarshalStringSlice(b []byte) ([]string, error) {
 	var ss []string
 	if err := json.Unmarshal(b, &ss); err != nil {
