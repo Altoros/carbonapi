@@ -90,6 +90,25 @@ Delete user:
 $ curl -X DELETE admin:secret@localhost:8081/users/test
 ```
 
+Globing
+-------
+
+- `*` Matches everything except `.`
+- `**` Matches everything, makes sense only to put it at the end of a glob
+
+Here are few examples:
+
+| Glob       | Metric    | Matches |
+|------------|-----------|---------|
+| `a.*`      | `a`       | Yes     |
+|            | `a.b`     | Yes     |
+|            | `a.b.c`   | No      |
+| `b.**`     | `b`       | Yes     |
+|            | `b.c`     | Yes     |
+|            | `b.c.z`   | Yes     |
+|            | `z`       | No      |
+
+
 License
 -------
 
