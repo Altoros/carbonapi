@@ -196,10 +196,10 @@ func (e ValidationError) Error() string {
 }
 
 var (
-	ErrInvalidUsername = ValidationError("username is too short, len < 4")
-	ErrInvalidPassword = ValidationError("password is too short, len < 4")
-	ErrInvalidGlobs    = ValidationError("globs cannot be empty, len = 0")
-	ErrInvalidGlob     = ValidationError("glob cannot be an empty string")
+	ErrInvalidUsername = ValidationError("username length is less than 4")
+	ErrInvalidPassword = ValidationError("password length is less than 4")
+	ErrInvalidGlobs    = ValidationError("globs is an empty array")
+	ErrInvalidGlob     = ValidationError("one of globs is an empty string")
 )
 
 // UserSave creates or updates existing user.
