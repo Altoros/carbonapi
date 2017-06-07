@@ -163,7 +163,7 @@ func (s *Store) Save(ctx context.Context, u *User) (err error) {
 	defer func() {
 		if err != nil {
 			if rErr := tx.Rollback(); rErr != nil {
-				fmt.Fprintf(os.Stderr, "tx.Rollback() = %v", rErr)
+				fmt.Fprintf(os.Stderr, "tx.Rollback() = %v\n", rErr)
 			}
 			return
 		}
