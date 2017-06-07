@@ -191,6 +191,9 @@ func (s *Store) Save(ctx context.Context, u *User) (err error) {
 
 	if rows.Next() {
 		// update existing
+
+		// TODO: remove hack
+		rows.Close()
 		_, err = s.exec(tx, ctx, "UPDATE users SET password = $1, globs = $2 WHERE username = $3",
 			u.Password, globs, u.Username)
 	} else {
