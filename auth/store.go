@@ -13,6 +13,7 @@ import (
 	_ "github.com/cznic/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
+	"os"
 )
 
 // Store is users management unit.
@@ -161,8 +162,12 @@ func (s *Store) Save(ctx context.Context, u *User) (err error) {
 
 	defer func() {
 		if err != nil {
-			err = tx.Rollback()
+			if rErr := tx.Rollback(); rErr != nil {
+				fmt.Fprintf(os.Stderr, "tx.Rollback() = %v", rErr)
+			}
+			return
 		}
+		err = tx.Commit()
 	}()
 
 	q := "SELECT 1 FROM users WHERE username = $1"
@@ -193,11 +198,7 @@ func (s *Store) Save(ctx context.Context, u *User) (err error) {
 		_, err = s.exec(tx, ctx, "INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)",
 			u.Username, u.Password, globs)
 	}
-
-	if err != nil {
-		return err
-	}
-	return tx.Commit()
+	return err
 }
 
 // ErrNotFound returned when user cannot be found.
