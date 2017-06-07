@@ -295,7 +295,7 @@ func hash(s, salt string) string {
 	h.Write([]byte(s))
 	h.Write([]byte(salt))
 
-	// base16 is 64 bytes long
+	// sha256 is 64 bytes long
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
