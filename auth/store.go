@@ -10,10 +10,11 @@ import (
 	"regexp"
 	"strings"
 
+	"os"
+
 	_ "github.com/cznic/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
-	"os"
 )
 
 // Store is users management unit.
@@ -181,6 +182,11 @@ func (s *Store) Save(ctx context.Context, u *User) (err error) {
 	}
 	defer rows.Close()
 
+	exists := rows.Next()
+	if err = rows.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "rows.Close() = %v\n", err)
+	}
+
 	// hash password
 	u.Password = hash(u.Password, s.salt)
 
@@ -189,11 +195,8 @@ func (s *Store) Save(ctx context.Context, u *User) (err error) {
 		return err
 	}
 
-	if rows.Next() {
+	if exists {
 		// update existing
-
-		// TODO: remove hack
-		rows.Close()
 		_, err = s.exec(tx, ctx, "UPDATE users SET password = $1, globs = $2 WHERE username = $3",
 			u.Password, globs, u.Username)
 	} else {
