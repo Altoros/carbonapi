@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func usersHandler(db *auth.DB) http.HandlerFunc {
+func usersHandler(db *auth.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// copied from above
 		t0 := time.Now()
@@ -151,7 +151,7 @@ func userFromContext(ctx context.Context) *auth.User {
 }
 
 // authUser authorizes users saved to sql database.
-func authUser(h http.HandlerFunc, db *auth.DB) http.HandlerFunc {
+func authUser(h http.HandlerFunc, db *auth.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username, password, _ := r.BasicAuth()
 		u, err := db.FindByUsernameAndPassword(r.Context(), username, password)

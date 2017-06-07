@@ -15,74 +15,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// User is user entity representation.
-type User struct {
-	Username string   `json:"username"`
-	Password string   `json:"password,omitempty"`
-	Globs    []string `json:"globs"`
-}
-
-// Can returns true when s matches at least one of user's globs.
-// See README.md for documentation and examples.
-func (u *User) Can(s string) bool {
-	for _, g := range u.Globs {
-		for i, j := 0, 0; ; i++ {
-			// enter wildcard
-			if g[j] == '*' {
-				// next symbol is * as well
-				if len(g) > j+1 && g[j+1] == '*' {
-					return true
-				}
-
-				// end of s is reached
-				if len(s) == i+1 {
-					return true
-				}
-
-				// everything except . matches *
-				if s[i] != '.' {
-					continue
-				}
-
-				// end of g is reached
-				if len(g) == j+1 {
-					break
-				}
-
-				// end of *
-				j++
-			}
-
-			// compare bytes
-			if s[i] != g[j] {
-				break
-			}
-
-			// last s and g positions
-			if len(s) == i+1 && len(g) == j+1 {
-				return true
-			}
-
-			// end of g is reached
-			if len(g) == j+1 {
-				break
-			}
-
-			// end of s is reached
-			if len(s) == i+1 {
-				// next g symbol is `.` or `*`, so:
-				// glob `abc.*` matches `abc` only, not `a` or `ab`
-				return g[j+1] == '.' || g[j+1] == '*'
-			}
-
-			j++
-		}
-	}
-	return false
-}
-
-// DB is users management unit.
-type DB struct {
+// Store is users management unit.
+type Store struct {
 	db     *sql.DB
 	salt   string
 	scheme string
@@ -97,8 +31,8 @@ const (
 
 // Open opens the named database url and uses the provided
 // salt for passwords hashing.
-func Open(url, salt string) (*DB, error) {
-	chunks := strings.Split(url, "://")
+func Open(databaseURL, salt string) (*Store, error) {
+	chunks := strings.Split(databaseURL, "://")
 	if len(chunks) != 2 {
 		return nil, errors.New("malformed database url")
 	}
@@ -114,7 +48,7 @@ func Open(url, salt string) (*DB, error) {
 
 	switch chunks[0] {
 	case schemePostgres:
-		chunks[1] = url
+		chunks[1] = databaseURL
 	case schemeSQLite3:
 		chunks[0] = schemeSQLite
 	}
@@ -137,36 +71,36 @@ func Open(url, salt string) (*DB, error) {
 	)`)
 
 	if err != nil {
-		// close db since we are returning an error here
+		// close s since we are returning an error here
 		db.Close()
 		return nil, err
 	}
 
-	return &DB{db: db, salt: salt, scheme: chunks[0]}, nil
+	return &Store{db: db, salt: salt, scheme: chunks[0]}, nil
 }
 
 var placeholderRegexp = regexp.MustCompile("\\$\\d+")
 
-// conn is a database interface, `*sql.DB` or `*sql.Tx`
+// conn is a database interface, `*sql.Store` or `*sql.Tx`
 type conn interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
 }
 
 // exec executes a query without returning rows.
-func (db *DB) exec(c conn, ctx context.Context, q string, v ...interface{}) (sql.Result, error) {
-	return c.ExecContext(ctx, db.prep(q), v...)
+func (s *Store) exec(c conn, ctx context.Context, q string, v ...interface{}) (sql.Result, error) {
+	return c.ExecContext(ctx, s.prep(q), v...)
 }
 
 // query executes a query that returns rows.
-func (db *DB) query(c conn, ctx context.Context, q string, v ...interface{}) (*sql.Rows, error) {
-	return c.QueryContext(ctx, db.prep(q), v...)
+func (s *Store) query(c conn, ctx context.Context, q string, v ...interface{}) (*sql.Rows, error) {
+	return c.QueryContext(ctx, s.prep(q), v...)
 }
 
 // prep replaces postgres placeholders `$n` with `?`,
 // needed for multi sql driver support.
-func (db *DB) prep(q string) string {
-	switch db.scheme {
+func (s *Store) prep(q string) string {
+	switch s.scheme {
 	case schemeMySQL, schemeSQLite:
 		return placeholderRegexp.ReplaceAllString(q, "?")
 	default:
@@ -174,17 +108,17 @@ func (db *DB) prep(q string) string {
 	}
 }
 
-// Close closes db connection.
-func (db *DB) Close() error {
-	return db.db.Close()
+// Close closes s connection.
+func (s *Store) Close() error {
+	return s.db.Close()
 }
 
-// Clean closes db connection and drops all tables.
-func (db *DB) Clean() error {
-	if _, err := db.db.Exec("DROP TABLE users"); err != nil {
+// Clean closes s connection and drops all tables.
+func (s *Store) Clean() error {
+	if _, err := s.db.Exec("DROP TABLE users"); err != nil {
 		return err
 	}
-	return db.db.Close()
+	return s.db.Close()
 }
 
 // ValidationError returned when model validation fails.
@@ -203,7 +137,7 @@ var (
 )
 
 // UserSave creates or updates existing user.
-func (db *DB) Save(ctx context.Context, u *User) (err error) {
+func (s *Store) Save(ctx context.Context, u *User) (err error) {
 	if len(u.Username) < 4 {
 		return ErrInvalidUsername
 	} else if len(u.Password) < 4 {
@@ -220,7 +154,7 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 
 	// we need to use transactions here to make sure that
 	// query and exec are using the same underlying connection.
-	tx, err := db.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -232,18 +166,18 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 	}()
 
 	q := "SELECT 1 FROM users WHERE username = $1"
-	if db.scheme != schemeSQLite {
+	if s.scheme != schemeSQLite {
 		q += " FOR UPDATE"
 	}
 
-	rows, err := db.query(tx, ctx, q, u.Username)
+	rows, err := s.query(tx, ctx, q, u.Username)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	// hash password
-	u.Password = hash(u.Password, db.salt)
+	u.Password = hash(u.Password, s.salt)
 
 	globs, err := marshalStringSlice(u.Globs)
 	if err != nil {
@@ -252,11 +186,11 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 
 	if rows.Next() {
 		// update existing
-		_, err = db.exec(tx, ctx, "UPDATE users SET password = $1, globs = $2 WHERE username = $3",
+		_, err = s.exec(tx, ctx, "UPDATE users SET password = $1, globs = $2 WHERE username = $3",
 			u.Password, globs, u.Username)
 	} else {
 		// create a new record
-		_, err = db.exec(tx, ctx, "INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)",
+		_, err = s.exec(tx, ctx, "INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)",
 			u.Username, u.Password, globs)
 	}
 
@@ -270,8 +204,8 @@ func (db *DB) Save(ctx context.Context, u *User) (err error) {
 var ErrNotFound = errors.New("user not found")
 
 // List is list of users.
-func (db DB) List(ctx context.Context) ([]*User, error) {
-	rows, err := db.query(db.db, ctx, "SELECT username, password, globs FROM users")
+func (s *Store) List(ctx context.Context) ([]*User, error) {
+	rows, err := s.query(s.db, ctx, "SELECT username, password, globs FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -290,8 +224,8 @@ func (db DB) List(ctx context.Context) ([]*User, error) {
 
 // FindByUsername finds user by user name,
 // `ErrNotFound` returned when it fails.
-func (db DB) FindByUsername(ctx context.Context, username string) (*User, error) {
-	rows, err := db.query(db.db, ctx, `
+func (s *Store) FindByUsername(ctx context.Context, username string) (*User, error) {
+	rows, err := s.query(s.db, ctx, `
 		SELECT username, password, globs
 		FROM users
 		WHERE username = $1
@@ -311,14 +245,14 @@ func (db DB) FindByUsername(ctx context.Context, username string) (*User, error)
 
 // FindByUsernameAndPassword finds user by username and password,
 // `ErrNotFound` returned when it fails.
-func (db *DB) FindByUsernameAndPassword(ctx context.Context, username, password string) (*User, error) {
-	rows, err := db.query(db.db, ctx, `
+func (s *Store) FindByUsernameAndPassword(ctx context.Context, username, password string) (*User, error) {
+	rows, err := s.query(s.db, ctx, `
 		SELECT username, password, globs
 		FROM users
 		WHERE username = $1
 		AND password = $2
 		LIMIT 1
-	`, username, hash(password, db.salt))
+	`, username, hash(password, s.salt))
 
 	if err != nil {
 		return nil, err
@@ -349,8 +283,8 @@ func scanUser(rows *sql.Rows) (*User, error) {
 }
 
 // Delete deletes the named user.
-func (db *DB) Delete(ctx context.Context, username string) error {
-	_, err := db.exec(db.db, ctx, "DELETE FROM users WHERE username = $1", username)
+func (s *Store) Delete(ctx context.Context, username string) error {
+	_, err := s.exec(s.db, ctx, "DELETE FROM users WHERE username = $1", username)
 	return err
 }
 
