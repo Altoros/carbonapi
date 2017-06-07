@@ -131,8 +131,8 @@ func Open(url, salt string) (*DB, error) {
 
 	// create tables
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
-		username VARCHAR(32) NOT NULL PRIMARY KEY,
-		password VARCHAR(32) NOT NULL,
+		username VARCHAR(64) NOT NULL PRIMARY KEY,
+		password VARCHAR(64) NOT NULL,
 		globs    TEXT
 	)`)
 
@@ -360,8 +360,8 @@ func hash(s, salt string) string {
 	h.Write([]byte(s))
 	h.Write([]byte(salt))
 
-	// base16 is 64 bytes long we need only 32
-	return fmt.Sprintf("%x", h.Sum(nil))[:32]
+	// base16 is 64 bytes long
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // marshalStringSlice dumps a slice of strings into byte encoding.
