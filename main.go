@@ -1197,12 +1197,6 @@ func main() {
 		}
 		defer store.Close()
 
-		if err := store.Migrate(); err != nil {
-			logger.Fatal("error during Migrate()",
-				zap.Error(err),
-			)
-		}
-
 		r.HandleFunc("/users/", authAdmin(usersHandler(store), Config.Auth.Username, Config.Auth.Password))
 		r.HandleFunc("/users", authAdmin(usersHandler(store), Config.Auth.Username, Config.Auth.Password))
 

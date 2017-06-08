@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 
@@ -16,11 +15,32 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// ValidationError returned when model validation fails.
+type ValidationError string
+
+func (e ValidationError) Error() string {
+	return string(e)
+}
+
+var (
+	ErrInvalidUsername = ValidationError("username length is less than 4")
+	ErrInvalidPassword = ValidationError("password length is less than 4")
+	ErrInvalidGlobs    = ValidationError("globs is an empty array")
+	ErrInvalidGlob     = ValidationError("one of globs is an empty string")
+	ErrNotFound        = errors.New("user not found")
+)
+
 // Store is users management unit.
 type Store struct {
 	db     *sql.DB
 	salt   string
-	scheme string
+
+	// prepared statements
+	listStmt                      *sql.Stmt
+	saveStmt                      *sql.Stmt
+	findByUsernameStmt            *sql.Stmt
+	findByUsernameAndPasswordStmt *sql.Stmt
+	deleteStmt                    *sql.Stmt
 }
 
 const (
@@ -59,70 +79,105 @@ func Open(databaseURL, salt string) (*Store, error) {
 		return nil, err
 	}
 
-	if err = db.Ping(); err != nil {
-		db.Close()
+	s := &Store{db: db, salt: salt}
+	if err = s.init(chunks[0]); err != nil {
+		s.Close()
 		return nil, err
 	}
+	return s, nil
+}
 
-	// create tables
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
+// init creates database structure and prepares statements.
+// It's not an actual migration process because we just try to
+// create tables when they don't exist and we don't keep track
+// of changes.
+func (s *Store) init(scheme string) error {
+	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS users (
 		username VARCHAR(64) NOT NULL PRIMARY KEY,
 		password VARCHAR(64) NOT NULL,
 		globs    TEXT
 	)`)
 
 	if err != nil {
-		// close s since we are returning an error here
-		db.Close()
-		return nil, err
+		return err
 	}
 
-	return &Store{db: db, salt: salt, scheme: chunks[0]}, nil
-}
+	s.listStmt, err = s.prep(scheme, "SELECT username, password, globs FROM users")
+	if err != nil {
+		return err
+	}
 
-// Migrate creates database structure, it's not an actual migration
-// process because we just try to create tables when they don't
-// exist and we don't keep track of changes.
-func (s *Store) Migrate() error {
-	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS users (
-		username VARCHAR(64) NOT NULL PRIMARY KEY,
-		password VARCHAR(64) NOT NULL,
-		globs    TEXT
-	)`)
-	return err
+	var saveSQL string
+	if scheme == schemePostgres {
+		saveSQL = `
+			INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)
+			ON CONFLICT (username) DO UPDATE SET password = $2, globs = $3`
+	} else {
+		saveSQL = "REPLACE INTO users (username, password, globs) VALUES ($1, $2, $3)"
+	}
+
+	s.saveStmt, err = s.prep(scheme, saveSQL)
+	if err != nil {
+		return err
+	}
+
+	s.deleteStmt, err = s.prep(scheme, "DELETE FROM users WHERE username = $1")
+	if err != nil {
+		return err
+	}
+
+	s.findByUsernameStmt, err = s.prep(scheme, `
+		SELECT username, password, globs
+		FROM users
+		WHERE username = $1
+		LIMIT 1
+	`)
+	if err != nil {
+		return err
+	}
+
+	s.findByUsernameAndPasswordStmt, err = s.prep(scheme, `
+		SELECT username, password, globs
+		FROM users
+		WHERE username = $1
+		AND password = $2
+		LIMIT 1
+	`)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 var placeholderRegexp = regexp.MustCompile("\\$\\d+")
 
-// conn is a database interface, `*sql.Store` or `*sql.Tx`
-type conn interface {
-	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
-	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
-}
-
-// exec executes a query without returning rows.
-func (s *Store) exec(c conn, ctx context.Context, q string, v ...interface{}) (sql.Result, error) {
-	return c.ExecContext(ctx, s.prep(q), v...)
-}
-
-// query executes a query that returns rows.
-func (s *Store) query(c conn, ctx context.Context, q string, v ...interface{}) (*sql.Rows, error) {
-	return c.QueryContext(ctx, s.prep(q), v...)
-}
-
-// prep replaces postgres placeholders `$n` with `?`,
-// needed for multi sql driver support.
-func (s *Store) prep(q string) string {
-	switch s.scheme {
-	case schemeMySQL, schemeSQLite:
-		return placeholderRegexp.ReplaceAllString(q, "?")
-	default:
-		return q
+// prep prepares a statement and replaces postgres
+// placeholders `$n` with `?` when driver is different.
+func (s *Store) prep(scheme, query string) (*sql.Stmt, error) {
+	if scheme == schemeMySQL || scheme == schemeSQLite {
+		query = placeholderRegexp.ReplaceAllString(query, "?")
 	}
+	return s.db.Prepare(query)
 }
 
-// Close closes s connection.
+// Close closes s connection and all prepared statements.
 func (s *Store) Close() error {
+	if s.listStmt != nil {
+		s.listStmt.Close()
+	}
+	if s.saveStmt != nil {
+		s.saveStmt.Close()
+	}
+	if s.findByUsernameStmt != nil {
+		s.findByUsernameStmt.Close()
+	}
+	if s.findByUsernameAndPasswordStmt != nil {
+		s.findByUsernameAndPasswordStmt.Close()
+	}
+	if s.deleteStmt != nil {
+		s.deleteStmt.Close()
+	}
 	return s.db.Close()
 }
 
@@ -133,21 +188,6 @@ func (s *Store) Clean() error {
 	}
 	return s.db.Close()
 }
-
-// ValidationError returned when model validation fails.
-type ValidationError string
-
-// Error is string representation.
-func (e ValidationError) Error() string {
-	return string(e)
-}
-
-var (
-	ErrInvalidUsername = ValidationError("username length is less than 4")
-	ErrInvalidPassword = ValidationError("password length is less than 4")
-	ErrInvalidGlobs    = ValidationError("globs is an empty array")
-	ErrInvalidGlob     = ValidationError("one of globs is an empty string")
-)
 
 // UserSave creates or updates existing user.
 func (s *Store) Save(ctx context.Context, u *User) (err error) {
@@ -165,68 +205,20 @@ func (s *Store) Save(ctx context.Context, u *User) (err error) {
 		}
 	}
 
-	// we need to use transactions here to make sure that
-	// query and exec are using the same underlying connection.
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err != nil {
-			if rErr := tx.Rollback(); rErr != nil {
-				fmt.Fprintf(os.Stderr, "tx.Rollback() = %v\n", rErr)
-			}
-			return
-		}
-		err = tx.Commit()
-	}()
-
-	q := "SELECT 1 FROM users WHERE username = $1"
-	if s.scheme != schemeSQLite {
-		q += " FOR UPDATE"
-	}
-
-	rows, err := s.query(tx, ctx, q, u.Username)
-	if err != nil {
-		return err
-	}
-
-	exists := rows.Next()
-	if err = rows.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "rows.Close() = %v\n", err)
-	}
-
-	if err = rows.Err(); err != nil {
-		return err
-	}
-
 	// hash password
-	u.Password = hash(u.Password, s.salt)
-
+	password := hash(u.Password, s.salt)
 	globs, err := marshalStringSlice(u.Globs)
 	if err != nil {
 		return err
 	}
 
-	if exists {
-		// update existing
-		_, err = s.exec(tx, ctx, "UPDATE users SET password = $1, globs = $2 WHERE username = $3",
-			u.Password, globs, u.Username)
-	} else {
-		// create a new record
-		_, err = s.exec(tx, ctx, "INSERT INTO users (username, password, globs) VALUES ($1, $2, $3)",
-			u.Username, u.Password, globs)
-	}
+	_, err = s.saveStmt.ExecContext(ctx, u.Username, password, globs)
 	return err
 }
 
-// ErrNotFound returned when user cannot be found.
-var ErrNotFound = errors.New("user not found")
-
 // List is list of users.
 func (s *Store) List(ctx context.Context) ([]*User, error) {
-	rows, err := s.query(s.db, ctx, "SELECT username, password, globs FROM users")
+	rows, err := s.listStmt.QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -248,13 +240,7 @@ func (s *Store) List(ctx context.Context) ([]*User, error) {
 // FindByUsername finds user by user name,
 // `ErrNotFound` returned when it fails.
 func (s *Store) FindByUsername(ctx context.Context, username string) (*User, error) {
-	rows, err := s.query(s.db, ctx, `
-		SELECT username, password, globs
-		FROM users
-		WHERE username = $1
-		LIMIT 1
-	`, username)
-
+	rows, err := s.findByUsernameStmt.QueryContext(ctx, username)
 	if err != nil {
 		return nil, err
 	}
@@ -270,14 +256,7 @@ func (s *Store) FindByUsername(ctx context.Context, username string) (*User, err
 // FindByUsernameAndPassword finds user by username and password,
 // `ErrNotFound` returned when it fails.
 func (s *Store) FindByUsernameAndPassword(ctx context.Context, username, password string) (*User, error) {
-	rows, err := s.query(s.db, ctx, `
-		SELECT username, password, globs
-		FROM users
-		WHERE username = $1
-		AND password = $2
-		LIMIT 1
-	`, username, hash(password, s.salt))
-
+	rows, err := s.findByUsernameAndPasswordStmt.QueryContext(ctx, username, hash(password, s.salt))
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +292,7 @@ func scanUser(rows *sql.Rows) (*User, error) {
 
 // Delete deletes the named user.
 func (s *Store) Delete(ctx context.Context, username string) error {
-	_, err := s.exec(s.db, ctx, "DELETE FROM users WHERE username = $1", username)
+	_, err := s.deleteStmt.ExecContext(ctx, username)
 	return err
 }
 

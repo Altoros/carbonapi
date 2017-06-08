@@ -30,10 +30,6 @@ func TestStore_All(t *testing.T) {
 			}
 			defer db.Clean()
 
-			if err = db.Migrate(); err != nil {
-				t.Fatal(err)
-			}
-
 			if err = db.Save(context.Background(), u); err != nil {
 				t.Fatal(err)
 			}
