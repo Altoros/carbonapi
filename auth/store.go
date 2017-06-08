@@ -7,10 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
-
-	"os"
 
 	_ "github.com/cznic/sqlite"
 	_ "github.com/go-sql-driver/mysql"
@@ -180,11 +179,14 @@ func (s *Store) Save(ctx context.Context, u *User) (err error) {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
 	exists := rows.Next()
 	if err = rows.Close(); err != nil {
 		fmt.Fprintf(os.Stderr, "rows.Close() = %v\n", err)
+	}
+
+	if err = rows.Err(); err != nil {
+		return err
 	}
 
 	// hash password
