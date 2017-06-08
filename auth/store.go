@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	_ "github.com/cznic/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
-	"os"
 )
 
 // Store is users management unit.
@@ -21,8 +21,6 @@ type Store struct {
 	db     *sql.DB
 	salt   string
 	scheme string
-
-	s string
 }
 
 const (
@@ -82,6 +80,9 @@ func Open(databaseURL, salt string) (*Store, error) {
 	return &Store{db: db, salt: salt, scheme: chunks[0]}, nil
 }
 
+// Migrate creates database structure, it's not an actual migration
+// process because we just try to create tables when they don't
+// exist and we don't keep track of changes.
 func (s *Store) Migrate() error {
 	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS users (
 		username VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -231,13 +232,15 @@ func (s *Store) List(ctx context.Context) ([]*User, error) {
 	}
 	defer rows.Close()
 
-	uu := []*User{}
-	for rows.Next() {
+	var uu []*User
+	for {
 		u, err := scanUser(rows)
 		if err != nil {
-			return nil, err
+			return uu, err
 		}
-		uu = append(uu, u)
+		if u == nil {
+			break
+		}
 	}
 	return uu, nil
 }
@@ -257,10 +260,11 @@ func (s *Store) FindByUsername(ctx context.Context, username string) (*User, err
 	}
 	defer rows.Close()
 
-	if !rows.Next() {
+	u, err := scanUser(rows)
+	if u == nil && err == nil {
 		return nil, ErrNotFound
 	}
-	return scanUser(rows)
+	return u, err
 }
 
 // FindByUsernameAndPassword finds user by username and password,
@@ -279,13 +283,18 @@ func (s *Store) FindByUsernameAndPassword(ctx context.Context, username, passwor
 	}
 	defer rows.Close()
 
-	if !rows.Next() {
+	u, err := scanUser(rows)
+	if u == nil && err == nil {
 		return nil, ErrNotFound
 	}
-	return scanUser(rows)
+	return u, err
 }
 
 func scanUser(rows *sql.Rows) (*User, error) {
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+
 	var u User
 	var b []byte
 	if err := rows.Scan(&u.Username, &u.Password, &b); err != nil {
