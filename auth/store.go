@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 
 	_ "github.com/cznic/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
+	"os"
 )
 
 // Store is users management unit.
@@ -21,6 +21,8 @@ type Store struct {
 	db     *sql.DB
 	salt   string
 	scheme string
+
+	s string
 }
 
 const (
@@ -78,6 +80,15 @@ func Open(databaseURL, salt string) (*Store, error) {
 	}
 
 	return &Store{db: db, salt: salt, scheme: chunks[0]}, nil
+}
+
+func (s *Store) Migrate() error {
+	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS users (
+		username VARCHAR(64) NOT NULL PRIMARY KEY,
+		password VARCHAR(64) NOT NULL,
+		globs    TEXT
+	)`)
+	return err
 }
 
 var placeholderRegexp = regexp.MustCompile("\\$\\d+")

@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func usersHandler(db *auth.Store) http.HandlerFunc {
+func usersHandler(store *auth.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// copied from above
 		t0 := time.Now()
@@ -47,7 +47,7 @@ func usersHandler(db *auth.Store) http.HandlerFunc {
 		if id == "" {
 			switch r.Method {
 			case http.MethodGet: // GET /users
-				u, err := db.List(ctx)
+				u, err := store.List(ctx)
 				if err != nil {
 					handleError(w, accessLogger, t0, err)
 					return
@@ -66,7 +66,7 @@ func usersHandler(db *auth.Store) http.HandlerFunc {
 					return
 				}
 
-				if err := db.Save(ctx, &u); err != nil {
+				if err := store.Save(ctx, &u); err != nil {
 					if verr, ok := err.(auth.ValidationError); ok {
 						http.Error(w, http.StatusText(http.StatusBadRequest)+": "+verr.Error(), http.StatusBadRequest)
 						accessLogger.Info("bad request",
@@ -89,7 +89,7 @@ func usersHandler(db *auth.Store) http.HandlerFunc {
 		} else {
 			switch r.Method {
 			case http.MethodGet: // GET /users/:id
-				u, err := db.FindByUsername(ctx, id)
+				u, err := store.FindByUsername(ctx, id)
 				if err != nil {
 					http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 					accessLogger.Info("not found",
@@ -105,7 +105,7 @@ func usersHandler(db *auth.Store) http.HandlerFunc {
 				}
 				writeResponse(w, b, "json", "")
 			case http.MethodDelete: // DELETE /users/:id
-				if err := db.Delete(ctx, id); err != nil {
+				if err := store.Delete(ctx, id); err != nil {
 					handleError(w, accessLogger, t0, err)
 					return
 				}
@@ -151,10 +151,10 @@ func userFromContext(ctx context.Context) *auth.User {
 }
 
 // authUser authorizes users saved to sql database.
-func authUser(h http.HandlerFunc, db *auth.Store) http.HandlerFunc {
+func authUser(h http.HandlerFunc, store *auth.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username, password, _ := r.BasicAuth()
-		u, err := db.FindByUsernameAndPassword(r.Context(), username, password)
+		u, err := store.FindByUsernameAndPassword(r.Context(), username, password)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return

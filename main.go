@@ -1189,20 +1189,26 @@ func main() {
 	ph := passthroughHandler
 
 	if Config.Auth.Enable {
-		db, err := auth.Open(Config.Auth.DatabaseURL, Config.Auth.Salt)
+		store, err := auth.Open(Config.Auth.DatabaseURL, Config.Auth.Salt)
 		if err != nil {
 			logger.Fatal("error during Open()",
 				zap.Error(err),
 			)
 		}
-		defer db.Close()
+		defer store.Close()
 
-		r.HandleFunc("/users/", authAdmin(usersHandler(db), Config.Auth.Username, Config.Auth.Password))
-		r.HandleFunc("/users", authAdmin(usersHandler(db), Config.Auth.Username, Config.Auth.Password))
+		if err := store.Migrate(); err != nil {
+			logger.Fatal("error during Migrate()",
+				zap.Error(err),
+			)
+		}
 
-		rh = authUser(rh, db)
-		fh = authUser(fh, db)
-		ph = authUser(ph, db)
+		r.HandleFunc("/users/", authAdmin(usersHandler(store), Config.Auth.Username, Config.Auth.Password))
+		r.HandleFunc("/users", authAdmin(usersHandler(store), Config.Auth.Username, Config.Auth.Password))
+
+		rh = authUser(rh, store)
+		fh = authUser(fh, store)
+		ph = authUser(ph, store)
 	}
 
 	r.HandleFunc("/render/", rh)
