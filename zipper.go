@@ -45,11 +45,11 @@ func (z zipper) Find(ctx context.Context, metric string) (pb.GlobResponse, error
 		matches := make([]*pb.GlobMatch, 0, len(pbresp.Matches))
 		for _, m := range pbresp.Matches {
 			if !user.Can(m.Path) {
-				fmt.Printf("- %s\n", m.Path) // TODO: remove
+				//fmt.Printf("- %s\n", m.Path)
 				continue
 			}
 
-			fmt.Printf("+ %s\n", m.Path) // TODO: remove
+			//fmt.Printf("+ %s\n", m.Path)
 			matches = append(matches, m)
 		}
 		pbresp.Matches = matches
