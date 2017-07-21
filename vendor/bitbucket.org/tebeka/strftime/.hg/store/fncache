@@ -1,0 +1,8 @@
+data/strftime.go.i
+data/strftime_test.go.i
+data/.hgtags.i
+data/LICENSE.txt.i
+data/.hgignore.i
+data/README.rst.i
+data/ChangeLog.i
+data/.travis.yml.i
