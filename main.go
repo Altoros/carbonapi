@@ -976,6 +976,12 @@ var Config = struct {
 	Logger:          []zapwriter.Config{DefaultLoggerConfig},
 }
 
+func hideNonEmpty(s *string) {
+	if *s != "" {
+		*s = "[HIDDEN]"
+	}
+}
+
 func main() {
 	err := zapwriter.ApplyConfig([]zapwriter.Config{DefaultLoggerConfig})
 	if err != nil {
@@ -1130,9 +1136,15 @@ func main() {
 		}
 	}
 
+	config := Config // copy config
+	hideNonEmpty(&config.Auth.Username)
+	hideNonEmpty(&config.Auth.Password)
+	hideNonEmpty(&config.Auth.DatabaseURL)
+	hideNonEmpty(&config.Auth.Salt)
+
 	logger.Info("starting carbonapi",
 		zap.String("build_version", BuildVersion),
-		zap.Any("config", Config),
+		zap.Any("config", config),
 	)
 
 	if host != "" {
