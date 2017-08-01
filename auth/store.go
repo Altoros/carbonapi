@@ -224,11 +224,11 @@ func (s *Store) List(ctx context.Context) ([]*User, error) {
 	}
 	defer rows.Close()
 
-	var uu []*User
+	uu := make([]*User, 0)
 	for {
 		u, err := scanUser(rows)
 		if err != nil {
-			return uu, err
+			return nil, err
 		}
 		if u == nil {
 			break
