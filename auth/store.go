@@ -32,8 +32,8 @@ var (
 
 // Store is users management unit.
 type Store struct {
-	db     *sql.DB
-	salt   string
+	db   *sql.DB
+	salt string
 
 	// prepared statements
 	listStmt                      *sql.Stmt
@@ -225,14 +225,16 @@ func (s *Store) List(ctx context.Context) ([]*User, error) {
 	defer rows.Close()
 
 	uu := make([]*User, 0)
-	for {
+	for rows.Next() {
 		u, err := scanUser(rows)
 		if err != nil {
 			return nil, err
 		}
-		if u == nil {
-			break
-		}
+		uu = append(uu, u)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
 	}
 	return uu, nil
 }
@@ -240,15 +242,10 @@ func (s *Store) List(ctx context.Context) ([]*User, error) {
 // FindByUsername finds user by user name,
 // `ErrNotFound` returned when it fails.
 func (s *Store) FindByUsername(ctx context.Context, username string) (*User, error) {
-	rows, err := s.findByUsernameStmt.QueryContext(ctx, username)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	u, err := scanUser(rows)
-	if u == nil && err == nil {
-		return nil, ErrNotFound
+	row := s.findByUsernameStmt.QueryRowContext(ctx, username)
+	u, err := scanUser(row)
+	if err == sql.ErrNoRows {
+		err = ErrNotFound
 	}
 	return u, err
 }
@@ -256,27 +253,22 @@ func (s *Store) FindByUsername(ctx context.Context, username string) (*User, err
 // FindByUsernameAndPassword finds user by username and password,
 // `ErrNotFound` returned when it fails.
 func (s *Store) FindByUsernameAndPassword(ctx context.Context, username, password string) (*User, error) {
-	rows, err := s.findByUsernameAndPasswordStmt.QueryContext(ctx, username, hash(password, s.salt))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	u, err := scanUser(rows)
-	if u == nil && err == nil {
-		return nil, ErrNotFound
+	row := s.findByUsernameAndPasswordStmt.QueryRowContext(ctx, username, hash(password, s.salt))
+	u, err := scanUser(row)
+	if err == sql.ErrNoRows {
+		err = ErrNotFound
 	}
 	return u, err
 }
 
-func scanUser(rows *sql.Rows) (*User, error) {
-	if !rows.Next() {
-		return nil, rows.Err()
-	}
+type scanner interface {
+	Scan(dest ...interface{}) error
+}
 
+func scanUser(s scanner) (*User, error) {
 	var u User
 	var b []byte
-	if err := rows.Scan(&u.Username, &u.Password, &b); err != nil {
+	if err := s.Scan(&u.Username, &u.Password, &b); err != nil {
 		return nil, err
 	}
 

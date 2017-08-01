@@ -52,6 +52,15 @@ func TestStore_All(t *testing.T) {
 				t.Fatal("FindByUsername: users are not equal")
 			}
 
+			users, err := db.List(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(users) != 1 {
+				t.Errorf("List: users len = %d, want %d", len(users), 1)
+			}
+
 			if err = db.Delete(context.Background(), "user"); err != nil {
 				t.Fatal(err)
 			}
