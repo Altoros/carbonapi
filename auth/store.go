@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	_ "github.com/cznic/sqlite"
+	//_ "github.com/cznic/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 )
