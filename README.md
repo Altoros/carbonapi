@@ -63,33 +63,6 @@ This program was originally developed for Booking.com.  With approval
 from Booking.com, the code was generalised and published as Open Source
 on github, for which the author would like to express his gratitude.
 
-Users management
-----------------
-
-Create or update an existing user:
-```
-$ curl admin:secret@localhost:8081/users -d '{
-  "username": "test",
-  "password": "secret",
-  "globs":    ["foo.*", "bar.baz"]
-}'
-```
-
-List users:
-```
-$ curl admin:secret@localhost:8081/users
-```
-
-Find user:
-```
-$ curl admin:secret@localhost:8081/users/test
-```
-
-Delete user:
-```
-$ curl -X DELETE admin:secret@localhost:8081/users/test
-```
-
 Globing
 -------
 
