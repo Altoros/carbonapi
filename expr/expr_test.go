@@ -543,6 +543,25 @@ func TestEvalExpression(t *testing.T) {
 		},
 		{
 			&expr{
+				target: "sum",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric1"},
+					{target: "metric2"},
+					{target: "metric3"},
+					{target: "metric4"},
+				},
+				argString: "metric1,metric2,metric3,metric4",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric1", 0, 1}: {makeResponse("metric1", []float64{1, 2, 3, 4, 5, math.NaN()}, 1, now32)},
+				{"metric2", 0, 1}: {makeResponse("metric2", []float64{2, 3, math.NaN(), 5, 6, math.NaN()}, 1, now32)},
+				{"metric3", 0, 1}: {makeResponse("metric3", []float64{3, 4, 5, 6, math.NaN(), math.NaN()}, 1, now32)},
+			},
+			[]*MetricData{makeResponse("sumSeries(metric1,metric2,metric3)", []float64{6, 9, 8, 15, 11, math.NaN()}, 1, now32)},
+		},
+		{
+			&expr{
 				target: "lowPass",
 				etype:  etFunc,
 				args: []*expr{
@@ -1311,6 +1330,58 @@ func TestEvalExpression(t *testing.T) {
 		},
 		{
 			&expr{
+				target: "divideSeriesLists",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric1"},
+					{target: "metric2"},
+				},
+				argString: "metric1,metric2",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric1", 0, 1}: {makeResponse("metric1", []float64{1, math.NaN(), math.NaN(), 3, 4, 12}, 1, now32)},
+				{"metric2", 0, 1}: {makeResponse("metric2", []float64{2, math.NaN(), 3, math.NaN(), 0, 6}, 1, now32)},
+			},
+			[]*MetricData{makeResponse("divideSeries(metric1,metric2)",
+				[]float64{0.5, math.NaN(), math.NaN(), math.NaN(), math.NaN(), 2}, 1, now32)},
+		},
+		{
+			&expr{
+				target: "multiplySeriesLists",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric1"},
+					{target: "metric2"},
+				},
+				argString: "metric1,metric2",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric1", 0, 1}: {makeResponse("metric1", []float64{1, math.NaN(), math.NaN(), 3, 4, 12}, 1, now32)},
+				{"metric2", 0, 1}: {makeResponse("metric2", []float64{2, math.NaN(), 3, math.NaN(), 0, 6}, 1, now32)},
+			},
+			[]*MetricData{makeResponse("multiplySeries(metric1,metric2)",
+				[]float64{2, math.NaN(), math.NaN(), math.NaN(), 0, 72}, 1, now32)},
+		},
+		{
+			&expr{
+				target: "diffSeriesLists",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric1"},
+					{target: "metric2"},
+				},
+				argString: "metric1,metric2",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric1", 0, 1}: {makeResponse("metric1", []float64{1, math.NaN(), math.NaN(), 3, 4, 12}, 1, now32)},
+				{"metric2", 0, 1}: {makeResponse("metric2", []float64{2, math.NaN(), 3, math.NaN(), 0, 6}, 1, now32)},
+			},
+			[]*MetricData{makeResponse("diffSeries(metric1,metric2)",
+				[]float64{-1, math.NaN(), math.NaN(), math.NaN(), 4, 6}, 1, now32)},
+		},
+
+		{
+			&expr{
 				target: "multiplySeries",
 				etype:  etFunc,
 				args: []*expr{
@@ -1403,6 +1474,26 @@ func TestEvalExpression(t *testing.T) {
 				target: "diffSeries",
 				etype:  etFunc,
 				args: []*expr{
+					{target: "metric1"},
+					{target: "metric2"},
+					{target: "metric3"},
+					{target: "metric4"},
+				},
+				argString: "metric1,metric2,metric3,metric4",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric1", 0, 1}: {makeResponse("metric1", []float64{5, math.NaN(), math.NaN(), 3, 4, 12}, 1, now32)},
+				{"metric2", 0, 1}: {makeResponse("metric2", []float64{3, math.NaN(), 3, math.NaN(), 0, 7}, 1, now32)},
+				{"metric3", 0, 1}: {makeResponse("metric3", []float64{1, math.NaN(), 3, math.NaN(), 0, 4}, 1, now32)},
+			},
+			[]*MetricData{makeResponse("diffSeries(metric1,metric2,metric3)",
+				[]float64{1, math.NaN(), math.NaN(), 3, 4, 1}, 1, now32)},
+		},
+		{
+			&expr{
+				target: "diffSeries",
+				etype:  etFunc,
+				args: []*expr{
 					{target: "metric*"},
 				},
 				argString: "metric*",
@@ -1415,6 +1506,24 @@ func TestEvalExpression(t *testing.T) {
 			},
 			[]*MetricData{makeResponse("diffSeries(metric*)",
 				[]float64{-1, math.NaN(), math.NaN(), 3, 4, 6}, 1, now32)},
+		},
+		{
+			&expr{
+				target: "diffSeries",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric*"},
+				},
+				argString: "metric*",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric*", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, math.NaN(), 3, 4, math.NaN()}, 1, now32),
+					makeResponse("metric2", []float64{5, math.NaN(), 6}, 2, now32),
+				},
+			},
+			[]*MetricData{makeResponse("diffSeries(metric*)",
+				[]float64{-4, -3, math.NaN(), 3, -2, math.NaN()}, 1, now32)},
 		},
 		{
 			&expr{
@@ -2443,6 +2552,25 @@ func TestEvalExpression(t *testing.T) {
 		},
 		{
 			&expr{
+				target: "linearRegression",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric1"},
+				},
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric1", 0, 1}: {
+					makeResponse("metric1",
+						[]float64{1, 2, math.NaN(), math.NaN(), 5, 6}, 1, now32),
+				},
+			},
+			[]*MetricData{
+				makeResponse("linearRegression(metric1)",
+					[]float64{1, 2, 3, 4, 5, 6}, 1, now32),
+			},
+		},
+		{
+			&expr{
 				target: "polyfit",
 				etype:  etFunc,
 				args: []*expr{
@@ -2626,6 +2754,27 @@ func TestEvalSummarize(t *testing.T) {
 			5,
 			now32,
 			now32 + 35,
+		},
+		{
+			&expr{
+				target: "summarize",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric1"},
+					{valStr: "5s", etype: etString},
+				},
+				argString: "metric1,'5s'",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric1", 0, 1}: {makeResponse("metric1", []float64{
+					1, 2, 3, 4, 5,
+				}, 10, now32)},
+			},
+			[]float64{1, 2, 3, 4, 5},
+			"summarize(metric1,'5s')",
+			10,
+			now32,
+			now32 + 50,
 		},
 		{
 			&expr{
@@ -3012,6 +3161,138 @@ func TestEvalSummarize(t *testing.T) {
 	}
 }
 
+func TestRewriteExpr(t *testing.T) {
+	now32 := int32(time.Now().Unix())
+
+	tests := []struct {
+		name       string
+		e          *expr
+		m          map[MetricRequest][]*MetricData
+		rewritten  bool
+		newTargets []string
+	}{
+		{
+			"ignore non-applyByNode",
+			&expr{
+				target: "sumSeries",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric*"},
+				},
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric*", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3}, 1, now32),
+				},
+				{"metric1", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3}, 1, now32),
+				},
+			},
+			false,
+			[]string{},
+		},
+		{
+			"applyByNode",
+			&expr{
+				target: "applyByNode",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric*"},
+					{val: 1, etype: etConst},
+					{valStr: "%.count", etype: etString},
+				},
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric*", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3}, 1, now32),
+				},
+				{"metric1", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3}, 1, now32),
+				},
+			},
+			true,
+			[]string{"metric1.count"},
+		},
+		{
+			"applyByNode",
+			&expr{
+				target: "applyByNode",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric*"},
+					{val: 1, etype: etConst},
+					{valStr: "%.count", etype: etString},
+					{valStr: "% count", etype: etString},
+				},
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric*", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3}, 1, now32),
+				},
+				{"metric1", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3}, 1, now32),
+				},
+			},
+			true,
+			[]string{"alias(metric1.count,\"metric1 count\")"},
+		},
+		{
+			"applyByNode",
+			&expr{
+				target: "applyByNode",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "foo.metric*"},
+					{val: 2, etype: etConst},
+					{valStr: "%.count", etype: etString},
+				},
+			},
+			map[MetricRequest][]*MetricData{
+				{"foo.metric*", 0, 1}: {
+					makeResponse("foo.metric1", []float64{1, 2, 3}, 1, now32),
+					makeResponse("foo.metric2", []float64{1, 2, 3}, 1, now32),
+				},
+				{"foo.metric1", 0, 1}: {
+					makeResponse("foo.metric1", []float64{1, 2, 3}, 1, now32),
+				},
+				{"foo.metric2", 0, 1}: {
+					makeResponse("foo.metric2", []float64{1, 2, 3}, 1, now32),
+				},
+			},
+			true,
+			[]string{"foo.metric1.count", "foo.metric2.count"},
+		},
+	}
+
+	for _, tt := range tests {
+		rewritten, newTargets, err := RewriteExpr(tt.e, 0, 1, tt.m)
+
+		if err != nil {
+			t.Errorf("failed to rewrite %v: %s", tt.name, err)
+			continue
+		}
+
+		if rewritten != tt.rewritten {
+			t.Errorf("failed to rewrite %v: expected rewritten=%v but was %v", tt.name, tt.rewritten, rewritten)
+			continue
+		}
+
+		var targetsMatch = true
+		if len(tt.newTargets) != len(newTargets) {
+			targetsMatch = false
+		} else {
+			for i := range tt.newTargets {
+				targetsMatch = targetsMatch && tt.newTargets[i] == newTargets[i]
+			}
+		}
+
+		if !targetsMatch {
+			t.Errorf("failed to rewrite %v: expected newTargets=%v but was %v", tt.name, tt.newTargets, newTargets)
+			continue
+		}
+	}
+}
+
 func TestEvalMultipleReturns(t *testing.T) {
 
 	now32 := int32(time.Now().Unix())
@@ -3096,6 +3377,32 @@ func TestEvalMultipleReturns(t *testing.T) {
 		},
 		{
 			&expr{
+				target: "groupByNodes",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric1.foo.*.*"},
+					{valStr: "sum", etype: etString},
+					{val: 0, etype: etConst},
+					{val: 1, etype: etConst},
+					{val: 3, etype: etConst},
+				},
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric1.foo.*.*", 0, 1}: {
+					makeResponse("metric1.foo.bar1.baz", []float64{1, 2, 3, 4, 5}, 1, now32),
+					makeResponse("metric1.foo.bar1.qux", []float64{6, 7, 8, 9, 10}, 1, now32),
+					makeResponse("metric1.foo.bar2.baz", []float64{11, 12, 13, 14, 15}, 1, now32),
+					makeResponse("metric1.foo.bar2.qux", []float64{7, 8, 9, 10, 11}, 1, now32),
+				},
+			},
+			"groupByNodes",
+			map[string][]*MetricData{
+				"metric1.foo.baz": {makeResponse("metric1.foo.baz", []float64{12, 14, 16, 18, 20}, 1, now32)},
+				"metric1.foo.qux": {makeResponse("metric1.foo.qux", []float64{13, 15, 17, 19, 21}, 1, now32)},
+			},
+		},
+		{
+			&expr{
 				target: "divideSeries",
 				etype:  etFunc,
 				args: []*expr{
@@ -3124,30 +3431,68 @@ func TestEvalMultipleReturns(t *testing.T) {
 		},
 		{
 			&expr{
-				target: "applyByNode",
+				target: "divideSeriesLists",
 				etype:  etFunc,
 				args: []*expr{
-					{target: "metric1.foo.*.*"},
-					{val: 2, etype: etConst},
-					{valStr: "sumSeries(%.baz)", etype: etString},
+					{target: "metric[12]"},
+					{target: "metric[12]"},
 				},
+				argString: "metric[12],metric[12]",
 			},
 			map[MetricRequest][]*MetricData{
-				{"metric1.foo.*.*", 0, 1}: {
-					makeResponse("metric1.foo.bar1.baz", []float64{1, 2, 3, 4, 5}, 1, now32),
-					makeResponse("metric1.foo.bar2.baz", []float64{11, 12, 13, 14, 15}, 1, now32),
-				},
-				{"metric1.foo.bar1.baz", 0, 1}: {
-					makeResponse("metric1.foo.bar1.baz", []float64{1, 2, 3, 4, 5}, 1, now32),
-				},
-				{"metric1.foo.bar2.baz", 0, 1}: {
-					makeResponse("metric1.foo.bar2.baz", []float64{11, 12, 13, 14, 15}, 1, now32),
+				{"metric[12]", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3, 4, 5}, 1, now32),
+					makeResponse("metric2", []float64{2, 4, 6, 8, 10}, 1, now32),
 				},
 			},
-			"applyByNode",
+			"divideSeriesListSameGroups",
 			map[string][]*MetricData{
-				"metric1.foo.bar1": {makeResponse("metric1.foo.bar1", []float64{1, 2, 3, 4, 5}, 1, now32)},
-				"metric1.foo.bar2": {makeResponse("metric1.foo.bar2", []float64{11, 12, 13, 14, 15}, 1, now32)},
+				"divideSeries(metric1,metric1)": {makeResponse("divideSeries(metric1,metric1)", []float64{1, 1, 1, 1, 1}, 1, now32)},
+				"divideSeries(metric2,metric2)": {makeResponse("divideSeries(metric2,metric2)", []float64{1, 1, 1, 1, 1}, 1, now32)},
+			},
+		},
+		{
+			&expr{
+				target: "multiplySeriesLists",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric[12]"},
+					{target: "metric[12]"},
+				},
+				argString: "metric[12],metric[12]",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric[12]", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3, 4, 5}, 1, now32),
+					makeResponse("metric2", []float64{2, 4, 6, 8, 10}, 1, now32),
+				},
+			},
+			"multiplySeriesListSameGroups",
+			map[string][]*MetricData{
+				"multiplySeries(metric1,metric1)": {makeResponse("multiplySeries(metric1,metric1)", []float64{1, 4, 9, 16, 25}, 1, now32)},
+				"multiplySeries(metric2,metric2)": {makeResponse("multiplySeries(metric2,metric2)", []float64{4, 16, 36, 64, 100}, 1, now32)},
+			},
+		},
+		{
+			&expr{
+				target: "diffSeriesLists",
+				etype:  etFunc,
+				args: []*expr{
+					{target: "metric[12]"},
+					{target: "metric[12]"},
+				},
+				argString: "metric[12],metric[12]",
+			},
+			map[MetricRequest][]*MetricData{
+				{"metric[12]", 0, 1}: {
+					makeResponse("metric1", []float64{1, 2, 3, 4, 5}, 1, now32),
+					makeResponse("metric2", []float64{2, 4, 6, 8, 10}, 1, now32),
+				},
+			},
+			"diffSeriesListSameGroups",
+			map[string][]*MetricData{
+				"diffSeries(metric1,metric1)": {makeResponse("diffSeries(metric1,metric1)", []float64{0, 0, 0, 0, 0}, 1, now32)},
+				"diffSeries(metric2,metric2)": {makeResponse("diffSeries(metric2,metric2)", []float64{0, 0, 0, 0, 0}, 1, now32)},
 			},
 		},
 		{

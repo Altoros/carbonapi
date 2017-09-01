@@ -118,7 +118,7 @@ color(seriesList, theColor)                                               |  0.9
 consolidateBy(seriesList, consolidationFunc)                              |  0.9.14 | Supported
 constantLine(value)                                                       |  0.9.9  | Supported
 countSeries(*seriesLists)                                                 |  0.9.14 | Supported
-cumulative(seriesList, consolidationFunc='sum')                           |  0.9.14 |
+cumulative(seriesList)                                                    |  0.9.14 | Supported
 currentAbove(seriesList, n)                                               |  0.9.9  | Supported
 currentBelow(seriesList, n)                                               |  0.9.9  | Supported
 dashed(*seriesList)                                                       |  0.9.9  | Supported
@@ -126,16 +126,21 @@ delay(seriesList, steps)                                                  |  1.0
 derivative(seriesList)                                                    |  0.9.9  | Supported
 diffSeries(*seriesLists)                                                  |  0.9.9  | Supported
 divideSeries(dividendSeriesList, divisorSeries)                           |  0.9.14 | Supported
+divideSeriesLists(dividendSeriesList, divisorSeriesList)                  |  1.0.2  | Supported
+diffSeriesLists(leftSeriesList, rightSeriesList)                          |  not in graphite  | Experimental
+multiplySeriesLists(leftSeriesList, rightSeriesList)                      |  not in graphite  | Experimental
 drawAsInfinite(seriesList)                                                |  0.9.9  | Supported
 events(*tags)                                                             |  0.9.9  |
 exclude(seriesList, pattern)                                              |  0.9.9  | Supported
 exponentialMovingAverage(seriesList, windowSize)                          |  1.0.0  |
+exponentialWeightedMovingAverage(seriesList, alpha)                       | not in graphite | Experimental
+ewma(seriesList, alpha)                                                   | - - -   | Short form of exponentialWeightedMovingAverage
 fallbackSeries( seriesList, fallback )                                    |  1.0.0  |
 [fft](https://en.wikipedia.org/wiki/Fast_Fourier_transform)(absSeriesList, phaseSeriesList)                                       |  not in graphite | Experimental
 grep(seriesList, pattern)                                                 |  1.0.0  | Supported
 group(*seriesLists)                                                       |  0.9.10 | Supported
 groupByNode(seriesList, nodeNum, callback)                                |  0.9.9  | Supported
-groupByNodes(seriesList, callback, *nodes)                                |  1.0.0  |
+groupByNodes(seriesList, callback, *nodes)                                |  1.0.0  | Supported
 highestAverage(seriesList, n)                                             |  0.9.9  | Supported
 highestCurrent(seriesList, n)                                             |  0.9.9  | Supported
 highestMax(seriesList, n)                                                 |  0.9.9  | Supported
@@ -156,8 +161,8 @@ keepLastValue(seriesList, limit=inf)                                      |  0.9
 legendValue(seriesList, *valueTypes)                                      |  0.9.10 | Supported
 limit(seriesList, n)                                                      |  0.9.9  | Supported
 lineWidth(seriesList, width)                                              |  0.9.9  | Supported
-linearRegression(seriesList, startSourceAt=None, endSourceAt=None)        |  1.0.0  |
-linearRegressionAnalysis(series)                                          |  1.0.0  |
+linearRegression(seriesList, startSourceAt=None, endSourceAt=None)        |  1.0.0 | Supported (based on polyfit)
+linearRegressionAnalysis(series)                                          |  1.0.0 |
 logarithm(seriesList, base=10), alias log()                               |  0.9.10 | Supported
 lowestAverage(seriesList, n)                                              |  0.9.9  | Supported
 lowestCurrent(seriesList, n)                                              |  0.9.9  | Supported
