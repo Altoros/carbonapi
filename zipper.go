@@ -45,11 +45,11 @@ func (z zipper) Find(ctx context.Context, metric string) (pb.GlobResponse, error
 		matches := make([]*pb.GlobMatch, 0, len(pbresp.Matches))
 		for _, m := range pbresp.Matches {
 			if !user.Can(m.Path) {
-				//fmt.Printf("- %s\n", m.Path)
+				//fmt.Printf("- %s\n", m.Path) // TODO: remove
 				continue
 			}
 
-			//fmt.Printf("+ %s\n", m.Path)
+			//fmt.Printf("+ %s\n", m.Path) // TODO: remove
 			matches = append(matches, m)
 		}
 		pbresp.Matches = matches
@@ -133,10 +133,10 @@ func (z zipper) Render(ctx context.Context, metric string, from, until int32) ([
 	user := userFromContext(ctx)
 	for _, m := range pbresp.Metrics {
 		if user != nil && !user.Can(m.Name) {
-			fmt.Printf("- %s\n", m.Name) // TODO: remove
+			//fmt.Printf("- %s\n", m.Name) // TODO: remove
 			continue
 		}
-		fmt.Printf("+ %s\n", m.Name) // TODO: remove
+		//fmt.Printf("+ %s\n", m.Name) // TODO: remove
 		result = append(result, &expr.MetricData{FetchResponse: *m})
 	}
 
