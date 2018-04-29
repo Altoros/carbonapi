@@ -12,6 +12,7 @@ import (
 	pickle "github.com/lomik/og-rek"
 	"github.com/satori/go.uuid"
 
+	"github.com/go-graphite/carbonapi/auth"
 	"github.com/go-graphite/carbonapi/carbonapipb"
 	"github.com/go-graphite/carbonapi/date"
 	"github.com/go-graphite/carbonapi/expr"
@@ -39,16 +40,61 @@ const (
 	pickleFormat    = "pickle"
 )
 
-func initHandlers() *http.ServeMux {
+func initHandlers(logger *zap.Logger) *http.ServeMux {
 	r := http.DefaultServeMux
-	r.HandleFunc("/render/", renderHandler)
-	r.HandleFunc("/render", renderHandler)
 
-	r.HandleFunc("/metrics/find/", findHandler)
-	r.HandleFunc("/metrics/find", findHandler)
+	if config.Auth.Enable {
+		store, err := auth.Open(config.Auth.DatabaseURL, config.Auth.Salt)
+		if err != nil {
+			logger.Fatal("error during Open()",
+				zap.Error(err),
+			)
+		}
+		defer store.Close()
 
-	r.HandleFunc("/info/", infoHandler)
-	r.HandleFunc("/info", infoHandler)
+		r.HandleFunc("/users/", authAdmin(usersHandler(store), config.Auth.Username, config.Auth.Password))
+		r.HandleFunc("/users", authAdmin(usersHandler(store), config.Auth.Username, config.Auth.Password))
+
+		r.HandleFunc("/render/", authUser(renderHandler, store))
+		r.HandleFunc("/render", authUser(renderHandler, store))
+
+		r.HandleFunc("/metrics/find/", authUser(findHandler, store))
+		r.HandleFunc("/metrics/find", authUser(findHandler, store))
+
+		r.HandleFunc("/info/", authUser(infoHandler, store))
+		r.HandleFunc("/info", authUser(infoHandler, store))
+
+	} else {
+
+		r.HandleFunc("/render/", renderHandler)
+		r.HandleFunc("/render", renderHandler)
+
+		r.HandleFunc("/metrics/find/", findHandler)
+		r.HandleFunc("/metrics/find", findHandler)
+
+		r.HandleFunc("/info/", infoHandler)
+		r.HandleFunc("/info", infoHandler)
+
+	}
+
+	r.HandleFunc("/lb_check", lbcheckHandler)
+
+	r.HandleFunc("/version", versionHandler)
+	r.HandleFunc("/version/", versionHandler)
+
+	r.HandleFunc("/functions", functionsHandler)
+	r.HandleFunc("/functions/", functionsHandler)
+
+	r.HandleFunc("/", usageHandler)
+
+	return r
+}
+
+func initHandlersWithAuth() *http.ServeMux {
+	r := http.DefaultServeMux
+
+	if config.Auth.Enable {
+	}
 
 	r.HandleFunc("/lb_check", lbcheckHandler)
 

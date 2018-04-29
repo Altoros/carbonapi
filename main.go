@@ -175,6 +175,14 @@ type graphiteConfig struct {
 	Prefix   string
 }
 
+type authConfig struct {
+	Enable      bool   `mapstructure:"enable"`
+	Username    string `mapstructure:"username"`
+	Password    string `mapstructure:"password"`
+	Salt        string `mapstructure:"salt"`
+	DatabaseURL string `mapstructure:"databaseURL"`
+}
+
 var config = struct {
 	ExtrapolateExperiment      bool               `mapstructure:"extrapolateExperiment"`
 	Logger                     []zapwriter.Config `mapstructure:"logger"`
@@ -198,6 +206,7 @@ var config = struct {
 	DefaultColors              map[string]string  `mapstructure:"defaultColors"`
 	GraphTemplates             string             `mapstructure:"graphTemplates"`
 	FunctionsConfigs           map[string]string  `mapstructure:"functionsConfig"`
+	Auth                       authConfig         `mapstructure:"auth"`
 
 	queryCache cache.BytesCache
 	findCache  cache.BytesCache
@@ -249,6 +258,12 @@ var config = struct {
 	},
 	ExpireDelaySec:             10 * 60,
 	GraphiteWeb09Compatibility: false,
+}
+
+func hideNonEmpty(s *string) {
+	if *s != "" {
+		*s = "[HIDDEN]"
+	}
 }
 
 func zipperStats(stats *zipperTypes.Stats) {
@@ -486,6 +501,11 @@ func setUpConfig(logger *zap.Logger) {
 		}
 	}
 
+	hideNonEmpty(&config.Auth.Username)
+	hideNonEmpty(&config.Auth.Password)
+	hideNonEmpty(&config.Auth.DatabaseURL)
+	hideNonEmpty(&config.Auth.Salt)
+
 	logger.Info("starting carbonapi",
 		zap.String("build_version", BuildVersion),
 		zap.Any("config", config),
@@ -707,7 +727,7 @@ func main() {
 
 	config.zipper = newZipper(zipperStats, &config.Upstreams, config.IgnoreClientTimeout, zapwriter.Logger("zipper"))
 
-	r := initHandlers()
+	r := initHandlers(logger)
 	handler := handlers.CompressHandler(r)
 	handler = handlers.CORS()(handler)
 	handler = handlers.ProxyHeaders(handler)

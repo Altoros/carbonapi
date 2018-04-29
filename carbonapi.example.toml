@@ -40,6 +40,13 @@ file = "carbonapi.log"
 level = "info"
 logger = ""
 
+[[auth]]
+enable = false
+username = "admin"
+password = "secret"
+salt = "seasalt"
+databaseURL = "postgres://postgres:postgres@localhost/carbonapi?sslmode=disable"
+
 # Uncomment this to get the behavior of graphite-web as proposed in https://github.com/graphite-project/graphite-web/pull/2239
 # Beware this will make darkbackground graphs less readable
 #[defaultColors]

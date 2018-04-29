@@ -142,6 +142,26 @@ This program was originally developed for Booking.com.  With approval
 from Booking.com, the code was generalised and published as Open Source
 on github, for which the author would like to express his gratitude.
 
+Globing
+-------
+
+- `*` Matches everything except `.`
+- `**` Matches everything, makes sense only to put it at the end of a glob
+
+Here are few examples:
+
+| Glob   | Metric   | Matches |
+|--------|----------|---------|
+| `aa.*` | `a`      | No      |
+|        | `aa`     | Yes     |
+|        | `aa.b`   | Yes     |
+|        | `aa.b.c` | No      |
+| `b.**` | `b`      | Yes     |
+|        | `b.c`    | Yes     |
+|        | `b.c.z`  | Yes     |
+|        | `z`      | No      |
+
+
 License
 -------
 
