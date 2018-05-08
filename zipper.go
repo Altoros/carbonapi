@@ -10,8 +10,8 @@ import (
 	"strconv"
 
 	"github.com/go-graphite/carbonapi/expr"
-	pb "github.com/go-graphite/carbonzipper/carbonzipperpb3"
 	"github.com/go-graphite/carbonapi/util"
+	pb "github.com/go-graphite/carbonzipper/carbonzipperpb3"
 )
 
 var errNoMetrics = errors.New("no metrics")
@@ -36,8 +36,25 @@ func (z zipper) Find(ctx context.Context, metric string) (pb.GlobResponse, error
 	var pbresp pb.GlobResponse
 
 	err := z.get(ctx, "Find", u, &pbresp)
+	if err != nil {
+		return pbresp, err
+	}
 
-	return pbresp, err
+	user := userFromContext(ctx)
+	if user != nil {
+		matches := make([]*pb.GlobMatch, 0, len(pbresp.Matches))
+		for _, m := range pbresp.Matches {
+			if !user.Can(m.Path) {
+				//fmt.Printf("- %s\n", m.Path) // TODO: remove
+				continue
+			}
+
+			//fmt.Printf("+ %s\n", m.Path) // TODO: remove
+			matches = append(matches, m)
+		}
+		pbresp.Matches = matches
+	}
+	return pbresp, nil
 }
 
 func (z zipper) get(ctx context.Context, who string, u *url.URL, msg unmarshaler) error {
@@ -109,12 +126,18 @@ func (z zipper) Render(ctx context.Context, metric string, from, until int32) ([
 		return result, err
 	}
 
-	if m := pbresp.Metrics; len(m) == 0 {
+	if len(pbresp.Metrics) == 0 {
 		return result, errNoMetrics
 	}
 
-	for i := range pbresp.Metrics {
-		result = append(result, &expr.MetricData{FetchResponse: *pbresp.Metrics[i]})
+	user := userFromContext(ctx)
+	for _, m := range pbresp.Metrics {
+		if user != nil && !user.Can(m.Name) {
+			//fmt.Printf("- %s\n", m.Name) // TODO: remove
+			continue
+		}
+		//fmt.Printf("+ %s\n", m.Name) // TODO: remove
+		result = append(result, &expr.MetricData{FetchResponse: *m})
 	}
 
 	return result, nil

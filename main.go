@@ -20,6 +20,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/go-graphite/carbonapi/auth"
 	"github.com/go-graphite/carbonapi/expr"
 	"github.com/go-graphite/carbonapi/util"
 	"github.com/go-graphite/carbonzipper/cache"
@@ -915,6 +916,14 @@ type graphiteConfig struct {
 	Prefix   string
 }
 
+type authConfig struct {
+	Enable      bool   `yaml:"enable"`
+	Username    string `yaml:"username"`
+	Password    string `yaml:"password"`
+	Salt        string `yaml:"salt"`
+	DatabaseURL string `yaml:"databaseURL"`
+}
+
 var Config = struct {
 	Logger          []zapwriter.Config `yaml:"logger"`
 	ZipperUrl       string             `yaml:"zipper"`
@@ -928,6 +937,7 @@ var Config = struct {
 	PidFile         string             `yaml:"pidFile"`
 	SendGlobsAsIs   bool               `yaml:"sendGlobsAsIs"`
 	MaxBatchSize    int                `yaml:"maxBatchSize"`
+	Auth            authConfig         `yaml:"auth"`
 
 	queryCache cache.BytesCache
 	findCache  cache.BytesCache
@@ -964,6 +974,12 @@ var Config = struct {
 
 	defaultTimeZone: time.Local,
 	Logger:          []zapwriter.Config{DefaultLoggerConfig},
+}
+
+func hideNonEmpty(s *string) {
+	if *s != "" {
+		*s = "[HIDDEN]"
+	}
 }
 
 func main() {
@@ -1120,9 +1136,15 @@ func main() {
 		}
 	}
 
+	config := Config // copy config
+	hideNonEmpty(&config.Auth.Username)
+	hideNonEmpty(&config.Auth.Password)
+	hideNonEmpty(&config.Auth.DatabaseURL)
+	hideNonEmpty(&config.Auth.Salt)
+
 	logger.Info("starting carbonapi",
 		zap.String("build_version", BuildVersion),
-		zap.Any("config", Config),
+		zap.Any("config", config),
 	)
 
 	if host != "" {
@@ -1173,14 +1195,36 @@ func main() {
 	}
 
 	r := http.DefaultServeMux
-	r.HandleFunc("/render/", renderHandler)
-	r.HandleFunc("/render", renderHandler)
 
-	r.HandleFunc("/metrics/find/", findHandler)
-	r.HandleFunc("/metrics/find", findHandler)
+	rh := renderHandler
+	fh := findHandler
+	ph := passthroughHandler
 
-	r.HandleFunc("/info/", passthroughHandler)
-	r.HandleFunc("/info", passthroughHandler)
+	if Config.Auth.Enable {
+		store, err := auth.Open(Config.Auth.DatabaseURL, Config.Auth.Salt)
+		if err != nil {
+			logger.Fatal("error during Open()",
+				zap.Error(err),
+			)
+		}
+		defer store.Close()
+
+		r.HandleFunc("/users/", authAdmin(usersHandler(store), Config.Auth.Username, Config.Auth.Password))
+		r.HandleFunc("/users", authAdmin(usersHandler(store), Config.Auth.Username, Config.Auth.Password))
+
+		rh = authUser(rh, store)
+		fh = authUser(fh, store)
+		ph = authUser(ph, store)
+	}
+
+	r.HandleFunc("/render/", rh)
+	r.HandleFunc("/render", rh)
+
+	r.HandleFunc("/metrics/find/", fh)
+	r.HandleFunc("/metrics/find", fh)
+
+	r.HandleFunc("/info/", ph)
+	r.HandleFunc("/info", ph)
 
 	r.HandleFunc("/lb_check", lbcheckHandler)
 	r.HandleFunc("/", usageHandler)
